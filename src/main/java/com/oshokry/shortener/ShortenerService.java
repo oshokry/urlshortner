@@ -59,6 +59,14 @@ public final class ShortenerService {
         if (!validCode(code)) throw new ApiException(404, "Short link not found");
         store.disable(code);
     }
+    public Link extend(String code, String ttlSeconds) throws IOException {
+        if (!validCode(code)) throw new ApiException(404, "Short link not found");
+        try {
+            long seconds = Long.parseLong(ttlSeconds);
+            if (seconds < 1 || seconds > 31_536_000) throw new NumberFormatException();
+            return store.extend(code, seconds, clock.instant());
+        } catch (NumberFormatException e) { throw new ApiException(400, "ttlSeconds must be an integer between 1 and 31536000"); }
+    }
     public static boolean validCode(String code) { return code != null && code.matches("[A-Za-z0-9_-]{4,32}"); }
     static String validateUrl(String raw) {
         if (raw == null || raw.isBlank()) throw new ApiException(400, "url is required");

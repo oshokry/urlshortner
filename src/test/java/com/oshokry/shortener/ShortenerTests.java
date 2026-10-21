@@ -145,6 +145,7 @@ public final class ShortenerTests {
                 public Link find(String code) { return null; }
                 public Link visit(String code, Instant now) throws IOException { throw new IOException("disk full"); }
                 public void disable(String code) throws IOException { throw new IOException("disk full"); }
+                public Link extend(String code, long seconds, Instant now) throws IOException { throw new IOException("disk full"); }
                 public void close() { }
             };
             try { new ShortenerService(broken, CLOCK).create("https://example.com", null, null); throw new AssertionError("Acknowledged failed write"); }
@@ -158,7 +159,99 @@ public final class ShortenerTests {
         });
         test("JSON response escaping", () -> check(ShortenerServer.quote("a\"b\\c\n").equals("\"a\\\"b\\\\c\\u000a\""), "JSON strings escaped"));
         deactivationTests(dir);
+        expiryExtensionTests(dir);
         httpTests(dir);
+    }
+    private static void expiryExtensionTests(Path dir) throws Exception {
+        Path journal = dir.resolve("extensions.journal");
+        try (JournalLinkStore store = new JournalLinkStore(journal)) {
+            ShortenerService service = new ShortenerService(store, CLOCK);
+            test("extend active expiry without changing link identity or analytics", () -> {
+                Link created = service.create("https://example.com/path", "extend-demo", "60");
+                service.resolve(created.code());
+                Link extended = service.extend(created.code(), "120");
+                check(extended.expiresAt().equals(NOW.plusSeconds(180)), "Added to current expiry");
+                check(extended.code().equals(created.code()) && extended.url().equals(created.url()), "Identity unchanged");
+                check(extended.createdAt().equals(created.createdAt()) && extended.clicks() == 1 && extended.lastClickedAt().equals(NOW), "History retained");
+                var afterOldExpiry = new ShortenerService(store, Clock.fixed(NOW.plusSeconds(60), ZoneOffset.UTC));
+                afterOldExpiry.resolve(created.code());
+                var atNewExpiry = new ShortenerService(store, Clock.fixed(NOW.plusSeconds(180), ZoneOffset.UTC));
+                error(410, () -> atNewExpiry.resolve(created.code()));
+            });
+            test("renew expired link and exact-boundary expiry from now", () -> {
+                service.create("https://example.com", "expired-extend", "1");
+                var later = new ShortenerService(store, Clock.fixed(NOW.plusSeconds(10), ZoneOffset.UTC));
+                check(later.extend("expired-extend", "60").expiresAt().equals(NOW.plusSeconds(70)), "Expired renewed from now");
+                service.create("https://example.com", "boundary-extend", "10");
+                check(later.extend("boundary-extend", "60").expiresAt().equals(NOW.plusSeconds(70)), "Exact boundary renewed");
+                later.resolve("expired-extend");
+            });
+            test("reject invalid extension durations without appending", () -> {
+                long size = Files.size(journal);
+                for (String value : List.of("", " ", "0", "-1", "1.5", "abc", "31536001", "999999999999999999999"))
+                    error(400, () -> service.extend("extend-demo", value));
+                error(400, () -> service.extend("extend-demo", null));
+                check(Files.size(journal) == size, "Invalid requests do not write");
+            });
+            test("extension enforces minimum and maximum durations", () -> {
+                service.create("https://example.com", "range-extend", "1");
+                check(service.extend("range-extend", "1").expiresAt().equals(NOW.plusSeconds(2)), "Minimum");
+                check(service.extend("range-extend", "31536000").expiresAt().equals(NOW.plusSeconds(31_536_002)), "Maximum");
+            });
+            test("reject missing, malformed, disabled and non-expiring links", () -> {
+                error(404, () -> service.extend("missing", "60"));
+                error(404, () -> service.extend("../bad", "60"));
+                service.create("https://example.com", "forever-extend", null);
+                error(409, () -> service.extend("forever-extend", "60"));
+                service.create("https://example.com", "disabled-extend", "60");
+                service.disable("disabled-extend");
+                error(410, () -> service.extend("disabled-extend", "60"));
+                check(service.stats("disabled-extend").disabled(), "Cannot reactivate disabled links");
+                check(service.stats("forever-extend").expiresAt() == null, "Never expiry retained");
+            });
+            test("concurrent extensions do not lose updates", () -> {
+                service.create("https://example.com", "extend-race", "60");
+                var pool = Executors.newFixedThreadPool(8);
+                try {
+                    List<Callable<Link>> tasks = new ArrayList<>();
+                    for (int i = 0; i < 20; i++) tasks.add(() -> service.extend("extend-race", "60"));
+                    for (var result : pool.invokeAll(tasks)) result.get();
+                    check(service.stats("extend-race").expiresAt().equals(NOW.plusSeconds(1260)), "All additions retained");
+                } finally { pool.shutdownNow(); }
+            });
+        }
+        test("expiry extensions and later disable survive replay", () -> {
+            try (JournalLinkStore store = new JournalLinkStore(journal)) {
+                check(store.find("extend-demo").expiresAt().equals(NOW.plusSeconds(180)), "Expiry persisted");
+                check(store.find("extend-demo").clicks() == 2, "Visits preserved across extension");
+                check(store.find("extend-race").expiresAt().equals(NOW.plusSeconds(1260)), "All events replayed");
+                store.disable("extend-demo");
+            }
+            try (JournalLinkStore store = new JournalLinkStore(journal)) {
+                check(store.find("extend-demo").disabled() && store.find("extend-demo").expiresAt().equals(NOW.plusSeconds(180)), "Later disable retained");
+            }
+        });
+        test("failed extension write leaves old expiry intact", () -> {
+            JournalLinkStore store = new JournalLinkStore(dir.resolve("extend-failure.journal"));
+            ShortenerService service = new ShortenerService(store, CLOCK);
+            service.create("https://example.com", "failure", "60");
+            store.close();
+            try { service.extend("failure", "60"); throw new AssertionError("Acknowledged failed extension"); }
+            catch (IOException expected) { check(service.stats("failure").expiresAt().equals(NOW.plusSeconds(60)), "No in-memory update"); }
+        });
+        test("orphan and non-increasing expiry events fail startup", () -> {
+            Path corrupt = dir.resolve("bad-extension.journal");
+            Files.writeString(corrupt, "E\tmissing\t" + NOW + "\n");
+            try (JournalLinkStore store = new JournalLinkStore(corrupt)) { store.find("missing"); throw new AssertionError("Accepted orphan"); }
+            catch (IOException expected) { check(expected.getMessage().contains("Invalid journal"), "Orphan rejected"); }
+            Path decrease = dir.resolve("decreasing-expiry.journal");
+            try (JournalLinkStore store = new JournalLinkStore(decrease)) {
+                new ShortenerService(store, CLOCK).create("https://example.com", "decrease", "60");
+            }
+            Files.writeString(decrease, "E\tdecrease\t" + NOW + "\n", StandardOpenOption.APPEND);
+            try (JournalLinkStore store = new JournalLinkStore(decrease)) { store.find("decrease"); throw new AssertionError("Accepted shrinking expiry"); }
+            catch (IOException expected) { check(expected.getMessage().contains("Invalid journal"), "Decreasing expiry rejected"); }
+        });
     }
     private static void deactivationTests(Path dir) throws Exception {
         Path journal = dir.resolve("disable.journal");
@@ -314,9 +407,36 @@ public final class ShortenerTests {
             test("HTTP disable missing code and method contract", () -> {
                 check(method(client, base + "/api/links/nope", "DELETE").statusCode() == 404, "Missing link");
                 var response = method(client, base + "/api/links/webdemo", "PUT");
-                check(response.statusCode() == 405 && response.headers().firstValue("Allow").orElse("").equals("GET, DELETE"), "Allowed methods");
+                check(response.statusCode() == 405 && response.headers().firstValue("Allow").orElse("").equals("GET, DELETE, PATCH"), "Allowed methods");
+            });
+            test("HTTP PATCH extends expiry and returns updated metadata", () -> {
+                store.create(new Link("patch-demo", "https://example.com/path", NOW, NOW.plusSeconds(60), 0, null));
+                var response = patch(client, base, "patch-demo", "ttlSeconds=3600", "application/x-www-form-urlencoded");
+                check(response.statusCode() == 200 && response.body().contains(NOW.plusSeconds(3660).toString()), "Updated expiry");
+                check(response.body().contains("\"code\":\"patch-demo\"") && response.body().contains("\"clicks\":0"), "Metadata retained");
+            });
+            test("HTTP PATCH renews expired link and blocks disabled or forever links", () -> {
+                check(patch(client, base, "expired", "ttlSeconds=60", "application/x-www-form-urlencoded").statusCode() == 200, "Renewed");
+                check(get(client, base + "/r/expired").statusCode() == 302, "Renewed redirect works");
+                check(patch(client, base, "webdemo", "ttlSeconds=60", "application/x-www-form-urlencoded").statusCode() == 410, "Disabled stays disabled");
+                store.create(new Link("forever-http", "https://example.com", NOW, null, 0, null));
+                check(patch(client, base, "forever-http", "ttlSeconds=60", "application/x-www-form-urlencoded").statusCode() == 409, "Forever unchanged");
+            });
+            test("HTTP PATCH rejects invalid forms and missing links", () -> {
+                for (String body : List.of("", "ttlSeconds=0", "ttlSeconds=abc", "ttlSeconds=60&alias=other", "url=https%3A%2F%2Fexample.com", "ttlSeconds=60&ttlSeconds=120", "ttlSeconds=%ZZ"))
+                    check(patch(client, base, "patch-demo", body, "application/x-www-form-urlencoded").statusCode() == 400, "Invalid form rejected");
+                check(patch(client, base, "nope", "ttlSeconds=60", "application/x-www-form-urlencoded").statusCode() == 404, "Missing");
+                check(store.find("patch-demo").expiresAt().equals(NOW.plusSeconds(3660)), "No mutation");
+            });
+            test("HTTP PATCH enforces media type and body limit", () -> {
+                check(patch(client, base, "patch-demo", "{}", "application/json").statusCode() == 415, "Media type");
+                check(patch(client, base, "patch-demo", "ttlSeconds=" + "1".repeat(8192), "application/x-www-form-urlencoded").statusCode() == 413, "Body limit");
             });
         }
+    }
+    private static HttpResponse<String> patch(HttpClient client, String base, String code, String body, String type) throws Exception {
+        return client.send(HttpRequest.newBuilder(URI.create(base + "/api/links/" + code)).timeout(Duration.ofSeconds(5))
+                .header("Content-Type", type).method("PATCH", HttpRequest.BodyPublishers.ofString(body)).build(), HttpResponse.BodyHandlers.ofString());
     }
     private static HttpResponse<String> method(HttpClient client, String url, String method) throws Exception {
         return client.send(HttpRequest.newBuilder(URI.create(url)).timeout(Duration.ofSeconds(5))

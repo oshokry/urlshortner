@@ -93,6 +93,33 @@ paths:
           description: Link disabled or already disabled; no response body.
         '404': {$ref: '#/components/responses/NotFound'}
         '503': {$ref: '#/components/responses/Unavailable'}
+    patch:
+      operationId: extendExpiry
+      summary: Add time to the current expiry, or from now if already expired
+      description: Adds 1-31536000 seconds per request. Repeated requests add time again; read metadata before retrying an uncertain result. Disabled and non-expiring links cannot be extended.
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [ttlSeconds]
+              properties:
+                ttlSeconds: {type: integer, minimum: 1, maximum: 31536000}
+      responses:
+        '200':
+          description: Updated link metadata, with unchanged short code and analytics.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Link'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {description: This link never expires.}
+        '410': {description: Disabled links cannot be extended.}
+        '413': {description: Body exceeds 8192 bytes.}
+        '415': {description: Use application/x-www-form-urlencoded.}
+        '503': {$ref: '#/components/responses/Unavailable'}
   /r/{code}:
     parameters:
       - {$ref: '#/components/parameters/Code'}

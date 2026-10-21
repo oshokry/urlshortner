@@ -72,6 +72,12 @@ public final class JournalLinkStore implements LinkStore {
                 Link link = links.get(fields[1]);
                 if (link == null) throw new IllegalArgumentException("disable without link");
                 links.put(link.code(), link.disable());
+            } else if (fields.length == 3 && fields[0].equals("E")) {
+                Link link = links.get(fields[1]);
+                Instant expiry = Instant.parse(fields[2]);
+                if (link == null || link.disabled() || link.expiresAt() == null || !expiry.isAfter(link.expiresAt()))
+                    throw new IllegalArgumentException("invalid expiry extension");
+                links.put(link.code(), link.extendTo(expiry));
             } else throw new IllegalArgumentException("unknown record");
         } catch (RuntimeException e) {
             throw new IOException("Invalid journal record; refusing to serve inconsistent data", e);
@@ -115,6 +121,18 @@ public final class JournalLinkStore implements LinkStore {
         if (link.expired(now)) throw new ApiException(410, "Short link has expired");
         Link updated = link.clicked(now);
         append("V\t" + code + "\t" + now);
+        links.put(code, updated);
+        return updated;
+    }
+
+    @Override public synchronized Link extend(String code, long seconds, Instant now) throws IOException {
+        Link link = links.get(code);
+        if (link == null) throw new ApiException(404, "Short link not found");
+        if (link.disabled()) throw new ApiException(410, "Disabled links cannot be extended");
+        if (link.expiresAt() == null) throw new ApiException(409, "This link never expires");
+        Instant base = link.expiresAt().isAfter(now) ? link.expiresAt() : now;
+        Link updated = link.extendTo(base.plusSeconds(seconds));
+        append("E\t" + code + "\t" + updated.expiresAt());
         links.put(code, updated);
         return updated;
     }

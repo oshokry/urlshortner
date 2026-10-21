@@ -9,5 +9,6 @@ public interface LinkStore extends AutoCloseable {
     Link find(String code);
     Link visit(String code, Instant now) throws IOException;
     void disable(String code) throws IOException;
+    Link extend(String code, long seconds, Instant now) throws IOException;
     @Override void close() throws IOException;
 }

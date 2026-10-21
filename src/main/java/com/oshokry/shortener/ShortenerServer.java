@@ -75,12 +75,23 @@ public final class ShortenerServer implements AutoCloseable {
                 headers.set("Location", "/api/links/" + link.code());
                 send(exchange, status, "application/json", json(link));
             } else if (path.startsWith("/api/links/")) {
-                requireMethod(exchange, "GET", "DELETE");
+                requireMethod(exchange, "GET", "DELETE", "PATCH");
                 String code = path.substring("/api/links/".length());
                 if (exchange.getRequestMethod().equals("DELETE")) {
                     service.disable(code);
                     status = 204;
                     exchange.sendResponseHeaders(status, -1);
+                } else if (exchange.getRequestMethod().equals("PATCH")) {
+                    String type = exchange.getRequestHeaders().getFirst("Content-Type");
+                    if (type == null || !type.split(";", 2)[0].trim().equalsIgnoreCase("application/x-www-form-urlencoded"))
+                        throw new ApiException(415, "Use application/x-www-form-urlencoded");
+                    byte[] bytes = exchange.getRequestBody().readNBytes(8193);
+                    if (bytes.length > 8192) throw new ApiException(413, "Request body exceeds 8192 bytes");
+                    Map<String, String> form = parseForm(new String(bytes, StandardCharsets.UTF_8));
+                    if (form.size() != 1 || !form.containsKey("ttlSeconds")) throw new ApiException(400, "Provide only ttlSeconds");
+                    Link updated = service.extend(code, form.get("ttlSeconds"));
+                    status = 200;
+                    send(exchange, status, "application/json", json(updated));
                 } else {
                     status = 200;
                     send(exchange, status, "application/json", json(service.stats(code)));

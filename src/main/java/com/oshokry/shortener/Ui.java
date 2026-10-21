@@ -18,6 +18,8 @@ final class Ui {
         <section class="card"><h2>Link analytics</h2><form id="lookup"><label for="code">Short code</label><div class="lookup"><input id="code" placeholder="Paste the code here" required pattern="[A-Za-z0-9_-]{4,32}"><button type="submit" class="secondary">Refresh</button></div></form>
         <div class="metrics"><div><strong id="clicks">—</strong><span>Total redirects</span></div><div><strong id="state" class="state">—</strong><span>Link status</span></div></div>
         <dl><dt>Destination</dt><dd id="destination">Create or look up a link to get started.</dd><dt>Expires</dt><dd id="expires">—</dd><dt>Last clicked</dt><dd id="last">—</dd></dl>
+        <form id="extension"><label for="extendSeconds">Extend expiry by</label><div class="lookup"><select id="extendSeconds"><option value="60">1 minute</option><option value="3600">1 hour</option><option value="86400" selected>1 day</option><option value="604800">1 week</option></select><button id="extend" type="submit" disabled>Extend expiry</button></div></form>
+        <p id="expiry-help">Adds time to the current expiry, or from now if expired.</p>
         <p id="stats-message" role="status" aria-live="polite"></p>
         <p id="disable-help">Disabling permanently stops redirects. Your click history is kept.</p>
         <button id="disable" class="danger" aria-describedby="disable-help" disabled>Look up a link to disable it</button></section></div>
@@ -43,6 +45,8 @@ final class Ui {
           el('last').textContent=data.lastClickedAt?date(data.lastClickedAt):'No clicks yet';
           el('disable').dataset.code=data.code; el('disable').disabled=data.disabled;
           el('disable').textContent=data.disabled?'Link disabled':'Disable '+data.code;
+          el('extend').disabled=data.disabled||!data.expiresAt;
+          el('expiry-help').textContent=data.disabled?'Disabled links cannot be extended.':!data.expiresAt?'This link never expires.':'Adds time to the current expiry, or from now if expired.';
           message('stats-message',data.disabled?'Disabled. Analytics are retained.':'Updated just now. Open your short link, then refresh.');
         }
         el('create').addEventListener('submit',async event=>{
@@ -53,10 +57,17 @@ final class Ui {
           } catch(error) { message('message',error.message,true); } finally { el('submit').disabled=false; }
         });
         el('lookup').addEventListener('submit',async event=>{
-          event.preventDefault(); el('disable').disabled=true; try { showStats(await request('/api/links/'+encodeURIComponent(el('code').value.trim()))); }
+          event.preventDefault(); el('disable').disabled=true; el('extend').disabled=true; try { showStats(await request('/api/links/'+encodeURIComponent(el('code').value.trim()))); }
           catch(error) { message('stats-message',error.message,true); }
         });
-        el('code').addEventListener('input',()=>{ el('disable').disabled=true; });
+        el('code').addEventListener('input',()=>{ el('disable').disabled=true; el('extend').disabled=true; });
+        el('extension').addEventListener('submit',async event=>{
+          event.preventDefault(); if(el('extend').disabled) return;
+          const code=el('disable').dataset.code; el('extend').disabled=true; el('disable').disabled=true;
+          try { showStats(await request('/api/links/'+encodeURIComponent(code),{method:'PATCH',body:new URLSearchParams({ttlSeconds:el('extendSeconds').value})}));
+            message('stats-message','Expiry extended. Your short link is unchanged.');
+          } catch(error) { message('stats-message',error.message+' Refresh to check the expiry before retrying.',true); }
+        });
         el('copy').addEventListener('click',async()=>{
           try { await navigator.clipboard.writeText(el('short').href); message('message','Copied to clipboard.'); }
           catch { message('message','Select and copy the short link above.'); }
@@ -64,7 +75,7 @@ final class Ui {
         el('disable').addEventListener('click',async()=>{
           const code=el('disable').dataset.code;
           if(!code||!confirm('Permanently disable '+code+'?')) return;
-          el('disable').disabled=true;
+          el('disable').disabled=true; el('extend').disabled=true;
           try { await request('/api/links/'+encodeURIComponent(code),{method:'DELETE'});
             showStats(await request('/api/links/'+encodeURIComponent(code)));
           } catch(error) { message('stats-message',error.message,true); el('disable').disabled=false; }

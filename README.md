@@ -1,6 +1,6 @@
 # Shortly — Java URL shortener
 
-A runnable **Java URL shortener prototype**: create short links, inspect persistent click analytics, and disable links through the browser UI or API. Java 17, standard library only. No Maven, database installation, API keys, or network access needed to build or run.
+A runnable **Java URL shortener prototype**: create short links, inspect persistent click analytics, extend expiry, and disable links through the browser UI or API. Java 17, standard library only. No Maven, database installation, API keys, or network access needed to build or run.
 
 ## Start here — Windows
 
@@ -40,6 +40,18 @@ The scripts invoke the JDK compiler module directly and compile with `--release 
 
 Start with [the interview walkthrough](docs/INTERVIEW.md) for the explanation and likely questions.
 
+## Extend expiry in the UI
+
+1. Create a link with a lifetime, or look up its code in **Link analytics** and click **Refresh**.
+2. Under **Extend expiry by**, choose **1 minute**, **1 hour**, **1 day**, or **1 week**, then click **Extend expiry**.
+3. The expiry timestamp updates immediately; the short URL, destination and analytics stay the same. Restarting preserves the extension.
+
+Active links gain time from their existing expiry. Expired links are renewed from now. Disabled links cannot be renewed; links set to **Never** need no extension. The API accepts 1–31,536,000 additional seconds per request. Each successful request adds time again; after a network error, refresh and inspect the expiry before retrying.
+
+```powershell
+curl.exe -i -X PATCH http://localhost:8080/api/links/my-demo --data-urlencode "ttlSeconds=3600"
+```
+
 ## Disable a link in the UI
 
 1. Create a link, or enter its short code in **Link analytics** and click **Refresh**.
@@ -62,6 +74,7 @@ Track this and future additions in [docs/FeatureTracker.md](docs/FeatureTracker.
 - Bounded worker queue, security headers, payload-free request logs, liveness endpoint.
 - Browser UI, API/schema contract, regression tests, and GitHub Actions workflow.
 - Brownfield enhancement: disable a link from the UI or API; retain analytics and persist the disabled state.
+- Extend an existing link's expiry from the UI or API; renew expired links without changing the short URL.
 
 ## API
 
@@ -72,6 +85,7 @@ Track this and future additions in [docs/FeatureTracker.md](docs/FeatureTracker.
 | HEAD | `/r/{code}` | Resolve without counting |
 | GET | `/api/links/{code}` | Metadata and analytics as JSON, including expired and disabled links |
 | DELETE | `/api/links/{code}` | Permanently disable; 204 even if already disabled; 404 if unknown |
+| PATCH | `/api/links/{code}` | Extend expiry using form field `ttlSeconds`; 200 with updated metadata; 409 never expires; 410 disabled |
 | GET | `/health` | Process liveness; 200 `{"status":"up"}` |
 | GET | `/` | Browser demo |
 
@@ -141,10 +155,10 @@ flowchart TD
 - [API contract](docs/openapi.yaml)
 - [Feature tracker: implementation history, demos and validation](docs/FeatureTracker.md)
 
-**Validation:** 39 automated tests passed locally on Java 17: the original 27 plus 12 deactivation checks covering HTTP behavior, persistence, concurrency, idempotency and write failures. Compilation treats warnings as errors. CI is configured for Linux and Windows; remote results must be verified after publishing.
+**Validation:** 52 automated tests passed locally on Java 17: the original 27, 12 deactivation checks, and 13 expiry-extension checks. Coverage includes HTTP behavior, persistence, concurrency, validation and write failures. Compilation treats warnings as errors. CI is configured for Linux and Windows; remote results must be verified after publishing.
 
 ## Scope and limitations
 
-This submission implements the **greenfield portion and a small brownfield deactivation scenario**, not the assignment's full three-scenario exercise. It demonstrates production-minded choices in a small prototype; it is **not ready for public production deployment**. No authentication, owner-level authorization, abuse screening, distributed storage, TLS termination, journal compaction or data-erasure/retention policy is included. Anyone with a code can read its analytics or disable it. Bind locally for the demo. Deactivation retains data and is permanent through the API.
+This submission implements the **greenfield portion and small brownfield enhancements**, not the assignment's full three-scenario exercise. It demonstrates production-minded choices in a small prototype; it is **not ready for public production deployment**. No authentication, owner-level authorization, abuse screening, distributed storage, TLS termination, journal compaction or data-erasure/retention policy is included. Anyone with a code can read its analytics, extend its expiry or disable it. Bind locally for the demo. Deactivation retains data and is permanent through the API.
 
 The journal serializes and syncs every write; this trades throughput for a clear durability model. Total redirects are not unique visitors and do not prove the destination page loaded. A crash after commit but before HTTP delivery can leave a committed operation without a received response. Health is liveness only, not disk readiness. Review [the documented next steps](docs/ENGINEERING.md) before treating this as a production design.

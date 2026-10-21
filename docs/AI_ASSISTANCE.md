@@ -48,3 +48,7 @@ Before high-impact production actions, require explicit human review/sign-off fo
 ## Subsequent brownfield task
 
 The engineer selected persistent link deactivation with a 100-line production-code limit. AI analyzed both redirect methods, replay and the existing lock, then implemented the endpoint and UI behavior in 77 changed production lines. Twelve new tests pass alongside the original 27. See [FeatureTracker.md](FeatureTracker.md) for decomposition, compatibility risks and review evidence. The earlier table describes the initial greenfield scope; this later work adds the requested brownfield slice. Publication was requested by the engineer; automated checks do not constitute production sign-off.
+
+## Subsequent expiry-extension task
+
+The engineer requested expiry extension with the newest Feature Tracker updates first. AI added the PATCH API, journal event, UI duration selector, and 13 tests. All 52 Java tests pass locally. The change uses 60 production-code lines (87 with the API schema). F002 is first in FeatureTracker.md, before F001. Publication is part of the requested repository workflow.
