@@ -1,0 +1,177 @@
+openapi: 3.0.3
+info:
+  title: Shortly URL Shortener
+  version: 1.0.0
+  description: Local greenfield prototype. Form-encoded create requests and JSON responses. No authentication.
+servers:
+  - url: http://localhost:8080
+paths:
+  /api/links:
+    post:
+      operationId: createLink
+      summary: Create a short link
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [url]
+              properties:
+                url:
+                  type: string
+                  format: uri
+                  maxLength: 2048
+                  description: Absolute HTTP(S) URL without credentials or newlines.
+                alias:
+                  type: string
+                  pattern: '^([A-Za-z0-9_-]{4,32})?$'
+                  description: Optional case-sensitive alias; blank means generated code.
+                ttlSeconds:
+                  oneOf:
+                    - type: integer
+                      minimum: 1
+                      maximum: 31536000
+                    - type: string
+                      enum: ['']
+                  description: Optional lifetime; omitted or blank means no expiry.
+      responses:
+        '201':
+          description: Created
+          headers:
+            Location:
+              schema: {type: string}
+              description: Relative metadata resource URL.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Link'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '409':
+          description: Alias already taken, including expired aliases.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+        '413':
+          description: Body exceeds 8192 bytes.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+        '415':
+          description: Unsupported media type; use form encoding.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+        '429':
+          description: Global creation rate exceeded; burst 30, refill 1 per second.
+          headers:
+            Retry-After:
+              schema: {type: integer, example: 1}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+  /api/links/{code}:
+    parameters:
+      - {$ref: '#/components/parameters/Code'}
+    get:
+      operationId: getLinkStats
+      summary: Read link metadata and analytics, even after expiry
+      responses:
+        '200':
+          description: Link metadata
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Link'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /r/{code}:
+    parameters:
+      - {$ref: '#/components/parameters/Code'}
+    get:
+      operationId: redirect
+      summary: Persist one redirect attempt, then redirect
+      responses:
+        '302': {$ref: '#/components/responses/Redirect'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '410': {$ref: '#/components/responses/Gone'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+    head:
+      operationId: checkLink
+      summary: Resolve without incrementing analytics
+      responses:
+        '302': {$ref: '#/components/responses/Redirect'}
+        '404': {description: Unknown code; no response body.}
+        '410': {description: Expired link; no response body.}
+  /health:
+    get:
+      operationId: liveness
+      summary: Process liveness, not storage readiness
+      responses:
+        '200':
+          description: Process is serving requests
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status: {type: string, enum: [up]}
+components:
+  parameters:
+    Code:
+      name: code
+      in: path
+      required: true
+      schema:
+        type: string
+        pattern: '^[A-Za-z0-9_-]{4,32}$'
+  schemas:
+    Link:
+      type: object
+      required: [code, shortUrl, url, createdAt, expiresAt, clicks, lastClickedAt, expired]
+      properties:
+        code: {type: string}
+        shortUrl: {type: string, format: uri}
+        url: {type: string, format: uri}
+        createdAt: {type: string, format: date-time}
+        expiresAt: {type: string, format: date-time, nullable: true}
+        clicks:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Committed GET redirect attempts, not unique visitors or confirmed page loads.
+        lastClickedAt: {type: string, format: date-time, nullable: true}
+        expired: {type: boolean}
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error: {type: string}
+  responses:
+    Redirect:
+      description: Temporary redirect with no body; Cache-Control no-store.
+      headers:
+        Location:
+          schema: {type: string, format: uri}
+        Cache-Control:
+          schema: {type: string, example: no-store}
+    BadRequest:
+      description: Invalid input, duplicate or unknown field, or malformed encoding.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+    NotFound:
+      description: Unknown or malformed code.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+    Gone:
+      description: Link has expired; no click recorded.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+    Unavailable:
+      description: Storage or I/O failure, or code allocation exhausted. An I/O failure may occur after commit; check before retrying.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
