@@ -24,11 +24,12 @@ export default function LinkList({ onSelect }) {
     <p role="status" className={error ? 'error' : ''}>{pending ? 'Loading…' : error || (links ? `${links.length} saved links.` : 'Refresh links to load saved links.')}</p>
     {links?.length === 0 && <p>No links yet. Create your first short link.</p>}
     {!!links?.length && <div className="links-table" role="region" aria-label="Saved links table" tabIndex={0}>
-      <table><thead><tr><th scope="col">Code</th><th scope="col">Destination</th><th scope="col">Clicks</th><th scope="col">Expires</th><th scope="col">Status</th></tr></thead>
+      <table><thead><tr><th scope="col">Code</th><th scope="col">Destination</th><th scope="col">Clicks</th><th scope="col">Expires</th><th scope="col">Status</th><th scope="col">Visit</th></tr></thead>
         <tbody>{links.map(link => <tr key={link.code}>
           <td><button className="secondary" aria-label={`Inspect ${link.code}`} disabled={pending} onClick={() => inspect(link.code)}>{link.code}</button></td>
           <td>{link.url}</td><td>{link.clicks}</td><td>{link.expiresAt ? new Date(link.expiresAt).toLocaleString() : 'Never'}</td>
           <td>{link.disabled ? 'Disabled' : link.expired ? 'Expired' : 'Active'}</td>
+          <td><a href={link.shortUrl} target="_blank" rel="noopener noreferrer">Visit</a></td>
         </tr>)}</tbody>
       </table>
     </div>}

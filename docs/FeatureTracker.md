@@ -4,11 +4,30 @@ Keep this file as the running history of feature additions. Keep the most recent
 
 | ID | Feature | Type | Implementation status |
 |---|---|---|---|
+| F006 | Visit saved links | Frontend enhancement | Implemented; build and browser check passed |
 | F005 | Saved links beside analytics | Frontend layout | Implemented; desktop/mobile layout checks passed |
 | F004 | List saved links | Brownfield enhancement | Implemented; 80 tests passed locally |
 | F003 | Separate React frontend | Architecture refactor | Implemented; 65 tests passed locally |
 | F002 | Extend expiry | Brownfield enhancement | Implemented; 52 tests passed locally |
 | F001 | Disable a short link | Brownfield enhancement | Implemented; 39 tests passed locally |
+
+## F006 — Visit saved links
+
+**Added:** 2026-10-21  
+**Request:** Add a Visit column to Saved links, linking to the shortened URL and opening separately.  
+**Status:** Implemented. Frontend-only; no Java, API or persistence changes.
+
+### Behavior and implementation
+
+- Added a **Visit** column with a **Visit** hyperlink for every saved link.
+- Uses the API's `shortUrl`, so navigation goes through the Java redirect endpoint and its existing analytics, expiry and disabled-link checks.
+- Opens in a new browser tab/window via `target="_blank"` with `rel="noopener noreferrer"`. The browser controls whether a new tab or window is used; the shortener page stays open.
+- Active links redirect and count a visit. Expired or disabled links return the existing 410 response. Refresh the list to see updated counts.
+- Updated `frontend/src/LinkList.jsx` and README instructions.
+
+### Validation and rollout
+
+The frontend production build passed. A headless Chromium check with stubbed API/short-URL responses verified the exact shortened-URL target, separate tab, preserved original page, null window opener and no page overflow at 390px. Backend behavior was unchanged and its suite was not rerun. Run `git pull` and refresh the browser with the frontend development server running. No Java restart is needed; built deployments must rebuild their frontend assets.
 
 ## F005 — Saved links beside analytics
 
