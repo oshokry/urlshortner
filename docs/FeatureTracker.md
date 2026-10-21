@@ -13,13 +13,15 @@ Keep this file as the running history of feature additions. Keep the most recent
 
 ## F006 — Visit saved links
 
+**Latest update — 2026-10-21:** Renamed the hyperlink text from Visit to Link. The Visit column heading and navigation behavior are unchanged.
+
 **Added:** 2026-10-21  
 **Request:** Add a Visit column to Saved links, linking to the shortened URL and opening separately.  
 **Status:** Implemented. Frontend-only; no Java, API or persistence changes.
 
 ### Behavior and implementation
 
-- Added a **Visit** column with a **Visit** hyperlink for every saved link.
+- Added a **Visit** column with a **Link** hyperlink for every saved link.
 - Uses the API's `shortUrl`, so navigation goes through the Java redirect endpoint and its existing analytics, expiry and disabled-link checks.
 - Opens in a new browser tab/window via `target="_blank"` with `rel="noopener noreferrer"`. The browser controls whether a new tab or window is used; the shortener page stays open.
 - Active links redirect and count a visit. Expired or disabled links return the existing 410 response. Refresh the list to see updated counts.

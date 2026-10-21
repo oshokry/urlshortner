@@ -29,7 +29,7 @@ export default function LinkList({ onSelect }) {
           <td><button className="secondary" aria-label={`Inspect ${link.code}`} disabled={pending} onClick={() => inspect(link.code)}>{link.code}</button></td>
           <td>{link.url}</td><td>{link.clicks}</td><td>{link.expiresAt ? new Date(link.expiresAt).toLocaleString() : 'Never'}</td>
           <td>{link.disabled ? 'Disabled' : link.expired ? 'Expired' : 'Active'}</td>
-          <td><a href={link.shortUrl} target="_blank" rel="noopener noreferrer">Visit</a></td>
+          <td><a href={link.shortUrl} target="_blank" rel="noopener noreferrer">Link</a></td>
         </tr>)}</tbody>
       </table>
     </div>}
