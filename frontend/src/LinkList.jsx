@@ -19,10 +19,10 @@ export default function LinkList({ onSelect }) {
   }
   return <section className="card saved-links" aria-labelledby="links-title">
     <h2 id="links-title">Saved links</h2>
-    <p>Newest first. Select a code to load its analytics above. Refresh to update counts and status.</p>
+    <p>Newest first. Select a code to load its analytics in Link analytics. Refresh to update counts and status.</p>
     <button className="secondary" disabled={pending} onClick={load}>Refresh links</button>
     <p role="status" className={error ? 'error' : ''}>{pending ? 'Loading…' : error || (links ? `${links.length} saved links.` : 'Refresh links to load saved links.')}</p>
-    {links?.length === 0 && <p>No links yet. Create your first short link above.</p>}
+    {links?.length === 0 && <p>No links yet. Create your first short link.</p>}
     {!!links?.length && <div className="links-table" role="region" aria-label="Saved links table" tabIndex={0}>
       <table><thead><tr><th scope="col">Code</th><th scope="col">Destination</th><th scope="col">Clicks</th><th scope="col">Expires</th><th scope="col">Status</th></tr></thead>
         <tbody>{links.map(link => <tr key={link.code}>

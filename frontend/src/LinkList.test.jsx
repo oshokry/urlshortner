@@ -23,7 +23,7 @@ describe('Saved links', () => {
     const { user, fetch } = setup();
     expect(fetch).not.toHaveBeenCalled();
     await load(user, fetch, []);
-    expect(await screen.findByText('No links yet. Create your first short link above.')).toBeVisible();
+    expect(await screen.findByText('No links yet. Create your first short link.')).toBeVisible();
     expect(screen.queryByRole('table')).not.toBeInTheDocument();
     expect(fetch).toHaveBeenCalledWith('/api/links', undefined);
   });

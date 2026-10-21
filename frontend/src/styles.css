@@ -5,7 +5,7 @@
 :root{color-scheme:light;font-family:system-ui,-apple-system,Segoe UI,sans-serif;color:#182c36;background:#f1f5f2}
 *{box-sizing:border-box}
 body{margin:0}
-main{max-width:1100px;margin:auto;padding:36px 28px}
+main{max-width:1800px;margin:auto;padding:36px 28px}
 header{display:flex;justify-content:space-between;align-items:center;gap:15px}
 .brand{font-size:27px;font-weight:800;letter-spacing:-1px}
 .badge{font-size:11px;letter-spacing:1.5px;border:1px solid #cad8cf;border-radius:30px;padding:9px 13px}
@@ -13,8 +13,8 @@ header{display:flex;justify-content:space-between;align-items:center;gap:15px}
 .eyebrow{font-size:11px;font-weight:700;letter-spacing:2px;color:#32735a}
 h1{font-size:clamp(42px,6vw,68px);letter-spacing:-3px;line-height:1.06;margin:16px 0}
 p{color:#52666c;line-height:1.6}
-.grid{display:grid;grid-template-columns:1.15fr 1fr;gap:22px}
-.card{background:white;border:1px solid #dce5df;border-radius:20px;padding:28px;box-shadow:0 8px 28px #243d2f05}
+.grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) minmax(0,1.6fr);gap:22px;align-items:start}
+.card{min-width:0;background:white;border:1px solid #dce5df;border-radius:20px;padding:28px;box-shadow:0 8px 28px #243d2f05}
 h2{font-size:20px;margin:0 0 24px}
 label{display:block;font-size:13px;font-weight:650;margin:0 0 9px}
 small{color:#71827b;font-weight:400}
@@ -40,7 +40,8 @@ footer{text-align:center;color:#53695d;font-size:12px;line-height:1.8;margin:30p
 footer span{color:#809087}
 .error{color:#ae3333}
 #message,#stats-message{font-size:13px}
-@media(max-width:760px){.grid{grid-template-columns:1fr}
+@media(max-width:1100px){.grid{grid-template-columns:1fr}}
+@media(max-width:760px){
 .badge{font-size:9px}
 .intro{margin-top:35px}
 main{padding:24px 18px}
@@ -48,7 +49,6 @@ main{padding:24px 18px}
 .row{grid-template-columns:1fr}
 }
 
-.saved-links{margin-top:22px}
 .links-table{overflow-x:auto;margin-top:18px}
 .links-table table{width:100%;border-collapse:collapse;font-size:13px;table-layout:fixed;min-width:640px}
 .links-table th,.links-table td{text-align:left;padding:12px 8px;border-bottom:1px solid #dce5df;overflow-wrap:anywhere;vertical-align:top}

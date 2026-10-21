@@ -56,9 +56,9 @@ Start with [the interview walkthrough](docs/INTERVIEW.md) for the explanation an
 
 ## List saved links
 
-1. Open **http://localhost:5173** and scroll to **Saved links**.
+1. Open **http://localhost:5173** and find **Saved links** to the right of **Link analytics**. On smaller screens, the panels stack vertically.
 2. Click **Refresh links** to load all saved links, newest first. The table shows each code, destination, click count, expiry and status. Active, expired, disabled and non-expiring links are included.
-3. Click a code to fetch its current metadata into **Link analytics** above. You can then extend expiry or disable it using the existing controls.
+3. Click a code to fetch its current metadata into **Link analytics**. You can then extend expiry or disable it using the existing controls.
 4. Click **Refresh links** after creating, opening or modifying links to update the table. Reading the list or selecting a code does not count as a redirect.
 
 ```powershell

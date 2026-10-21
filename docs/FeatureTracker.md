@@ -11,9 +11,11 @@ Keep this file as the running history of feature additions. Keep the most recent
 
 ## F004 — List saved links
 
+**Latest update — 2026-10-21:** Moved Saved links to the right of Link analytics in a three-column desktop layout. Panels stack on screens up to 1100px; wide tables scroll within their panel. Updated positional instructions. Production build and browser layout checks passed at 1800px, 1280px, 1000px and 390px.
+
 **Added:** 2026-10-21  
 **Request:** Implement scenario 3, List links, with Java backend and React UI. Preserve the small-change budget and keep this tracker newest first.  
-**UI:** **Saved links** table with **Refresh links**. Displays code, destination, clicks, expiry and status. Selecting a code fetches fresh metadata into the analytics panel above, including when reselecting the same code.  
+**UI:** **Saved links** table with **Refresh links**. Displays code, destination, clicks, expiry and status. Selecting a code fetches fresh metadata into the analytics panel, including when reselecting the same code.  
 **API:** `GET /api/links` returns an array of existing Link metadata objects; HTTP 200 and `[]` for an empty store.  
 **Status:** Implemented and locally validated. See Git history for publication details.
 

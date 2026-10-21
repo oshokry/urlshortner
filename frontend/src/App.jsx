@@ -14,8 +14,8 @@ export default function App() {
     <div className="grid">
       <CreateLink onCreated={select} />
       <LinkAnalytics key={selection} initialLink={selected} />
+      <LinkList onSelect={select} />
     </div>
-    <LinkList onSelect={select} />
     <footer>Persistent links &amp; clicks · HTTP 302 redirects · No tracking cookies<br />
       <span>Local interview prototype. Analytics count redirect requests, not unique people.</span></footer>
   </main>;
