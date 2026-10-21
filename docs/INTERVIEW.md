@@ -8,8 +8,8 @@ Only claim personal review for code and decisions you have actually reviewed.
 
 ## Show it (two minutes)
 
-1. Run `scripts/test.ps1` on Windows or `bash scripts/test.sh` on macOS/Linux. Show **27 passing tests**.
-2. Run the app and open `http://localhost:8080`.
+1. Run `scripts/test.ps1` on Windows or `bash scripts/test.sh` on macOS/Linux. Show **52 passing Java tests**, then run `npm --prefix frontend test` for the React component tests.
+2. Start Java with `scripts/run.ps1` and React in a second terminal with `scripts/frontend.ps1` (use the `.sh` equivalents on macOS/Linux). Open `http://localhost:5173`.
 3. Create `https://example.com` with alias `interview` and no expiry.
 4. Open the generated link. Return and refresh analytics. Explain “redirect requests, not unique visitors.”
 5. Try the alias again; show the conflict rather than overwriting a destination.
@@ -19,7 +19,7 @@ If a code already exists from rehearsal, reuse its analytics or choose a fresh a
 
 ## Explain the design (one minute)
 
-- **Separation:** HTTP adapter → business service → storage interface. Clock and code supplier can be injected for deterministic tests.
+- **Separation:** React frontend → Java HTTP API → business service → storage interface. Clock and code supplier can be injected for deterministic tests.
 - **Uniqueness:** secure random base62 ID; insert is atomic; collisions retry up to ten times. A custom alias collision is a 409.
 - **Reliability:** synchronized journal append + disk force before publishing state. Single-process lock prevents two writers; recovery discards an incomplete final record and refuses complete corrupt records.
 - **Analytics:** count a successfully persisted GET redirect attempt. HEAD does not count. No 301 caching that silently bypasses analytics or expiry.
@@ -34,7 +34,7 @@ Useful example: the code uses form-encoded input rather than introducing an unte
 
 | Question | Defensible answer |
 |---|---|
-| Why no Spring Boot? | For this one-hour prototype, the JDK-only approach removes build/network/setup dependencies. A team service would usually adopt its standard framework, serializer, validation and observability stack. |
+| Why no Spring Boot? | For this one-hour prototype, the JDK-only backend removes Java build/network dependencies; the separate React frontend uses npm/Vite. A team service would usually adopt its standard framework, serializer, validation and observability stack. |
 | Why not Redis/Postgres now? | Avoid provisioning for the demo. The storage interface creates a migration boundary; production would use a transactional database with a unique code constraint. |
 | Does it scale horizontally? | Not as implemented. The file lock intentionally prevents shared-file multi-process writers. Move to shared durable storage and define cache/analytics consistency before scaling out. |
 | How would you scale reads? | Cache code-to-destination plus expiry, bound cache lifetime by expiry, and publish click events asynchronously. Address event durability, retry deduplication and analytics lag explicitly. |

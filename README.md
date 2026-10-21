@@ -1,34 +1,48 @@
-# Shortly — Java URL shortener
+# Shortly — Java + React URL shortener
 
-A runnable **Java URL shortener prototype**: create short links, inspect persistent click analytics, extend expiry, and disable links through the browser UI or API. Java 17, standard library only. No Maven, database installation, API keys, or network access needed to build or run.
+A runnable URL shortener with a **Java 17 backend** and a **React frontend**. Create links, inspect persistent click analytics, extend expiry, and disable links through the browser or API. Java uses only the standard library; React uses npm and Vite. No Maven, database installation or API keys are required. The first frontend install requires network access.
 
 ## Start here — Windows
 
-Install/use a **JDK 17 or newer** and confirm `java -version`. From this folder in PowerShell:
+Install a **JDK 17+** and **Node.js 24 LTS, version 24.15 or newer** (Node 22.22.2+ is also supported). Open two PowerShell terminals in this repository.
+
+**Terminal 1 — Java backend:**
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\test.ps1
+git pull
 powershell -ExecutionPolicy Bypass -File .\scripts\run.ps1
 ```
 
-Open **http://localhost:8080**. Keep the terminal open; Ctrl+C stops the service.
-
-The downloadable ZIP also includes a prebuilt executable JAR. With Java 17+ installed, you can skip compilation and run:
+**Terminal 2 — React frontend:**
 
 ```powershell
-java -jar build/urlshortner.jar
+npm.cmd --prefix frontend ci
+powershell -ExecutionPolicy Bypass -File .\scripts\frontend.ps1
 ```
 
-The repository contains source; the prebuilt JAR is a convenience in the downloadable package only.
+Open **http://localhost:5173**. Keep both terminals open. Ctrl+C stops the process in each terminal. Port **8080 is now API-only**; its root returns 404. The frontend script installs dependencies automatically if `node_modules` is absent; run `npm.cmd --prefix frontend ci` again after pulling dependency changes.
 
-On macOS/Linux (JDK 17+):
+**Run tests:**
 
-```bash
-bash scripts/test.sh
-bash scripts/run.sh
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\test.ps1
+powershell -ExecutionPolicy Bypass -File .\scripts\frontend.ps1 -Command test
 ```
 
-The scripts invoke the JDK compiler module directly and compile with `--release 17 -Xlint:all -Werror`. A JRE without the compiler module is insufficient. No preview features are used. Windows scripts are supplied; execution was validated on Linux with Java 17.
+On macOS/Linux, use `bash scripts/run.sh` in one terminal and `bash scripts/frontend.sh` in another. Use `bash scripts/test.sh` and `bash scripts/frontend.sh test` for tests. Run `npm --prefix frontend ci` after pulling dependency changes.
+
+The backend scripts compile with `--release 17 -Xlint:all -Werror`. A JRE without the compiler module is insufficient. Local checks ran on Linux; CI includes Linux and Windows. Old downloadable JAR/ZIP builds predate this refactor; use this repository for the current version.
+
+## Frontend build and deployment
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\frontend.ps1 -Command build
+powershell -ExecutionPolicy Bypass -File .\scripts\frontend.ps1 -Command preview
+```
+
+The build outputs static assets to `frontend/dist`. Preview at **http://localhost:4173** with Java still running. `vite preview` is only for local verification. For deployment, serve `frontend/dist` with your web server and proxy `/api`, `/r` and `/health` to Java on the same public origin. Set Java's `BASE_URL` to that public origin. Keep the API private behind the proxy; no CORS changes are needed. Apply the restrictive CSP shown in `frontend/vite.config.js` to the deployed frontend; the Vite development server needs a looser policy for hot reload.
+
+Browser integration tests use a separate journal under `build/`, backend port 18080, and frontend port 4174. To run them from `frontend/`: `npx playwright install chromium`, then `npm run test:e2e`. They start and stop their own servers.
 
 ## Two-minute demo
 
@@ -87,7 +101,7 @@ Track this and future additions in [docs/FeatureTracker.md](docs/FeatureTracker.
 | DELETE | `/api/links/{code}` | Permanently disable; 204 even if already disabled; 404 if unknown |
 | PATCH | `/api/links/{code}` | Extend expiry using form field `ttlSeconds`; 200 with updated metadata; 409 never expires; 410 disabled |
 | GET | `/health` | Process liveness; 200 `{"status":"up"}` |
-| GET | `/` | Browser demo |
+
 
 Creation intentionally uses the standard **`application/x-www-form-urlencoded`** format, avoiding a hand-written JSON parser. Responses are JSON. The full contract is in [docs/openapi.yaml](docs/openapi.yaml).
 
@@ -121,18 +135,19 @@ Windows: use `curl.exe` and put each command on one line. Do not use `-L` when d
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `PORT` | `8080` | Listening port |
+| `PORT` | `8080` | Java API listening port |
 | `HOST` | `127.0.0.1` | Local-only by default |
 | `BASE_URL` | `http://localhost:<port>` | Public origin for returned links; not inferred from untrusted Host headers |
 | `DATA_FILE` | `data/links.journal` | Persistent journal; ignored by Git |
+| `API_PROXY_TARGET` | `http://127.0.0.1:8080` | Frontend dev/preview proxy target; set in the frontend terminal |
 
-PowerShell example: `$env:PORT='8081'` then run the script. Bash example: `PORT=8081 bash scripts/run.sh`.
+For a custom backend port, set `$env:PORT='8081'` in the backend terminal and `$env:API_PROXY_TARGET='http://127.0.0.1:8081'` in the frontend terminal before starting each process. Bash equivalents: `PORT=8081 bash scripts/run.sh` and `API_PROXY_TARGET=http://127.0.0.1:8081 bash scripts/frontend.sh`.
 
 ## Architecture and evidence
 
 ```mermaid
 flowchart TD
-    A[Browser or API client] --> B[HTTP adapter]
+    A[React frontend] --> B[Java HTTP adapter]
     B --> C[ShortenerService]
     C --> D[LinkStore interface]
     D --> E[JournalLinkStore]
@@ -147,7 +162,12 @@ flowchart TD
 | `LinkStore.java` | Atomic storage contract |
 | `JournalLinkStore.java` | Durable events, replay and thread safety |
 | `Link.java` | Immutable link snapshot |
-| `Ui.java` | Small same-origin browser UI |
+| `frontend/src/App.jsx` | React layout and create-to-analytics handoff |
+| `frontend/src/CreateLink.jsx` | Creation form and copy link |
+| `frontend/src/LinkAnalytics.jsx` | Lookup, analytics, expiry extension and disable |
+| `frontend/src/api.js` | Form-encoded API requests and error handling |
+| `frontend/src/styles.css` | Frontend styling |
+| `frontend/vite.config.js` | React build, local proxy and test configuration |
 
 - [Engineering decisions, task decomposition and limitations](docs/ENGINEERING.md)
 - [AI assistance record and engineer review checklist](docs/AI_ASSISTANCE.md)
@@ -155,7 +175,7 @@ flowchart TD
 - [API contract](docs/openapi.yaml)
 - [Feature tracker: implementation history, demos and validation](docs/FeatureTracker.md)
 
-**Validation:** 52 automated tests passed locally on Java 17: the original 27, 12 deactivation checks, and 13 expiry-extension checks. Coverage includes HTTP behavior, persistence, concurrency, validation and write failures. Compilation treats warnings as errors. CI is configured for Linux and Windows; remote results must be verified after publishing.
+**Validation:** 52 Java tests, 11 React component tests and 2 headless browser integration tests pass locally; the frontend production build succeeds. The backend route test now verifies that Java serves no UI assets. Coverage includes HTTP behavior, persistence, concurrency, validation and write failures. Compilation treats warnings as errors. CI runs Java tests, React tests and frontend builds on Linux and Windows, plus browser integration tests on Linux. Remote results must be verified after publishing.
 
 ## Scope and limitations
 

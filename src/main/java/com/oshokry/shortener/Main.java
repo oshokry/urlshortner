@@ -20,7 +20,7 @@ public final class Main {
             try { store.close(); } catch (Exception e) { System.err.println("Journal close failed"); }
         }));
         server.start();
-        System.out.println("URL shortener ready: http://localhost:" + server.port());
+        System.out.println("Java API ready: http://localhost:" + server.port());
         System.out.println("Press Ctrl+C to stop. Links and clicks survive restart.");
     }
 }

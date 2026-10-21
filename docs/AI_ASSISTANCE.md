@@ -52,3 +52,9 @@ The engineer selected persistent link deactivation with a 100-line production-co
 ## Subsequent expiry-extension task
 
 The engineer requested expiry extension with the newest Feature Tracker updates first. AI added the PATCH API, journal event, UI duration selector, and 13 tests. All 52 Java tests pass locally. The change uses 60 production-code lines (87 with the API schema). F002 is first in FeatureTracker.md, before F001. Publication is part of the requested repository workflow.
+
+## React frontend separation — 2026-10-21
+
+User request: “refactor to keep java for backend and React for front end.” The existing UI was embedded in `Ui.java`. Removed that class and its static routes, extracted the presentation into a React/Vite project, retained API semantics and journal data, and added Windows/Linux frontend startup instructions. This is an architecture refactor beyond the earlier small-feature line budget. Updated README, interview walkthrough, engineering notes and the newest-first feature tracker (F003).
+
+Validation includes the unchanged backend business suite (52 passing Java checks, with the old UI route check updated to API-only behavior), 11 React component tests and a production bundle build. Two headless Chromium integration tests pass against the real Java API behind the frontend proxy. They exposed an HTML pattern issue with an unescaped hyphen; the React forms now escape it and a browser check verifies invalid aliases are rejected. The standard Playwright browser download was unavailable; the local test used an npm-packaged Chromium binary and temporary launch configuration, without disabling browser web security. Dependencies are pinned in the npm lockfile. No Windows execution or remote CI success is claimed from local results. Review API error handling, confirmation, uncertain additive requests and deployment proxy/CSP configuration before production use.

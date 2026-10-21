@@ -1,0 +1,54 @@
+import { test, expect } from '@playwright/test';
+
+test('React production build creates, redirects, extends and disables through Java', async ({ page, request }) => {
+  const errors = [];
+  page.on('pageerror', error => errors.push(error.message));
+  await page.goto('/');
+  await page.getByLabel('Destination URL').fill('https://example.com/react-demo');
+  await page.getByLabel('Custom alias').fill('react-demo');
+  await page.getByLabel('Expires after').selectOption('60');
+  await page.getByRole('button', { name: 'Shorten link' }).click();
+  await expect(page.getByRole('link')).toHaveAttribute('href', 'http://127.0.0.1:18080/r/react-demo');
+  await expect(page.getByText('Active', { exact: true })).toBeVisible();
+  const before = await (await request.get('/api/links/react-demo')).json();
+  const redirect = await request.get('/r/react-demo', { maxRedirects: 0 });
+  expect(redirect.status()).toBe(302);
+  expect(redirect.headers().location).toBe('https://example.com/react-demo');
+  await page.getByRole('button', { name: 'Refresh' }).click();
+  await expect(page.getByText('1', { exact: true })).toBeVisible();
+  await page.getByLabel('Extend expiry by').selectOption('3600');
+  await page.getByRole('button', { name: 'Extend expiry' }).click();
+  await expect(page.getByText('Expiry extended. Your short link is unchanged.')).toBeVisible();
+  const extended = await (await request.get('/api/links/react-demo')).json();
+  expect(Date.parse(extended.expiresAt) - Date.parse(before.expiresAt)).toBe(3600000);
+  page.once('dialog', dialog => dialog.dismiss());
+  await page.getByRole('button', { name: 'Disable react-demo', exact: true }).click();
+  await expect(page.getByText('Active', { exact: true })).toBeVisible();
+  page.once('dialog', dialog => dialog.accept());
+  await page.getByRole('button', { name: 'Disable react-demo', exact: true }).click();
+  await expect(page.getByText('Disabled', { exact: true })).toBeVisible();
+  expect((await request.get('/r/react-demo', { maxRedirects: 0 })).status()).toBe(410);
+  await page.reload();
+  await page.getByLabel('Short code').fill('react-demo');
+  await page.getByRole('button', { name: 'Refresh' }).click();
+  await expect(page.getByRole('button', { name: 'Link disabled' })).toBeDisabled();
+  await expect(page.getByText('1', { exact: true })).toBeVisible();
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  expect(errors).toEqual([]);
+});
+
+test('non-expiring links cannot be extended and alias conflicts are visible', async ({ page }) => {
+  await page.goto('/');
+  await page.getByLabel('Destination URL').fill('https://example.com');
+  await page.getByLabel('Custom alias').fill('bad!alias');
+  expect(await page.getByLabel('Custom alias').evaluate(input => input.checkValidity())).toBe(false);
+  await page.getByLabel('Custom alias').fill('forever-demo');
+  await page.getByRole('button', { name: 'Shorten link' }).click();
+  await expect(page.getByText('This link never expires.')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Extend expiry' })).toBeDisabled();
+  await page.getByRole('button', { name: 'Shorten link' }).click();
+  await expect(page.locator('#message.error')).toBeVisible();
+  await page.getByLabel('Short code').fill('missing-demo');
+  await expect(page.getByRole('button', { name: 'Look up a link to disable it' })).toBeDisabled();
+});

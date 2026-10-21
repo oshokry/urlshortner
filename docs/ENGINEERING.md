@@ -52,8 +52,8 @@ This is not a general-purpose transactional database: no checksums for detecting
 
 - Localhost binding by default; no secrets required; no outbound destination fetches.
 - Allow HTTP(S) with a parsed host; reject credentials, control characters, encoded CR/LF, bad ports and excessively long URLs.
-- Small form payloads; duplicate and unknown fields rejected. JSON responses use centralized string escaping. UI renders API content with `textContent`.
-- Same-origin assets and a restrictive CSP; no inline script execution. No CORS opt-in.
+- Small form payloads; duplicate and unknown fields rejected. JSON responses use centralized string escaping. React renders API strings as escaped text; no HTML injection API is used.
+- React owns HTML/CSS/JS; Java owns the API, redirects and journal. Vite proxies API calls locally without CORS. Built preview uses a restrictive CSP; deployment must apply it at the static web server. Development permits Vite hot reload.
 - 30-token global creation burst, refilling 1/second. This is a demo guard, not per-user fairness or distributed abuse control. Invalid create attempts consume tokens too.
 - Eight worker threads and bounded queue (128); caller-runs backpressure. A reverse proxy with connection/body/header timeouts is still needed against slow clients; queue bounds alone do not solve denial of service.
 - Logs contain status and elapsed duration, not URLs or payloads; stored destinations themselves may contain sensitive query strings.
@@ -63,11 +63,11 @@ This is not a general-purpose transactional database: no checksums for detecting
 ## Quality gates and observed results
 
 - Java 17 compilation with `--release 17 -Xlint:all -Werror`: passed.
-- 27 automated tests: passed. Includes genuine local HTTP requests, 24 concurrent alias creations (one winner), 100 concurrent visits (no lost updates), deterministic expiry boundaries, forced collision retries, persistence, partial-tail recovery and corrupt-record refusal.
-- No external runtime/build libraries, so no third-party Java dependency inventory to resolve. This does **not** replace JDK/container patching or a security review.
+- 52 Java tests, 11 React component tests and 2 headless browser integration tests: passed. Frontend production build: passed. Includes genuine local HTTP requests, 24 concurrent alias creations (one winner), 100 concurrent visits (no lost updates), deterministic expiry boundaries, forced collision retries, persistence, partial-tail recovery and corrupt-record refusal.
+- Java has no external libraries. React/Vite and test dependencies are pinned in `frontend/package-lock.json`; use `npm ci` for repeatable installs. This does **not** replace JDK/container patching or a security review.
 - GitHub Actions runs the same suite on Java 17. Workflow execution must be checked after repository publication; local success is not evidence of a remote CI run.
 - No production load test, automated vulnerability scan, Windows execution or disk/power-loss fault campaign is claimed. Concurrency tests verify correctness, not a throughput SLO.
-- Browser assets and endpoints were verified over HTTP. A full graphical browser check could not run because the execution environment has no Chromium binary; manually rehearse the browser workflow before the interview.
+- Frontend browser integration tests live in `frontend/e2e/`; the Java API suite remains independent of Node and the frontend build.
 
 ## Production evolution, in priority order
 
@@ -77,4 +77,4 @@ This is not a general-purpose transactional database: no checksums for detecting
 4. Add real readiness, structured metrics/traces and alerts. Run load, disk failure, shutdown and recovery tests.
 5. Cache redirect lookups if measured traffic needs it. Consider durable async analytics with documented eventual consistency and duplicate-handling semantics.
 
-The subsequent [feature tracker](FeatureTracker.md) documents deactivation and expiry extension with their impact analysis, implementation and validation. The full ambiguous scenario remains separate assignment work; this does not claim to deliver all three scenarios.
+The subsequent [feature tracker](FeatureTracker.md) documents the React separation, deactivation and expiry extension with their impact analysis, implementation and validation. The full ambiguous scenario remains separate assignment work; this does not claim to deliver all three scenarios.

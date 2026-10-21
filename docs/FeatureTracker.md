@@ -4,8 +4,36 @@ Keep this file as the running history of feature additions. Keep the most recent
 
 | ID | Feature | Type | Implementation status |
 |---|---|---|---|
+| F003 | Separate React frontend | Architecture refactor | Implemented; 65 tests passed locally |
 | F002 | Extend expiry | Brownfield enhancement | Implemented; 52 tests passed locally |
 | F001 | Disable a short link | Brownfield enhancement | Implemented; 39 tests passed locally |
+
+## F003 — Separate React frontend
+
+**Added:** 2026-10-21  
+**Request:** Keep Java for the backend and move the hardcoded UI into React. This architecture refactor is broader than the earlier 100-line feature exercises.  
+**Status:** Implemented. The newest update stays first in this tracker; F001/F002 below retain their original implementation evidence.
+
+### Components and behavior
+
+- Removed `Ui.java` and the Java routes that served embedded HTML, JavaScript and CSS. Java now serves only API, redirects and health. No storage format or API contract changed; existing journal data is compatible.
+- Added `frontend/` with React components for creation, analytics and link management, a small API client, independent CSS, Vite configuration and a pinned npm lockfile. Frontend edits no longer require Java compilation.
+- Preserved create, copy, refresh, click analytics, expiry extension, permanent disable and confirmation. Editing a lookup code clears its displayed data and actions. Pending requests lock lookup controls; uncertain mutations require an explicit refresh before retrying.
+- Browser traffic stays on the frontend origin through the local API proxy. No Java CORS relaxation or new authentication scheme was added.
+- Added Windows/Linux frontend scripts, build/preview commands, React tests and browser integration tests. CI builds/tests both layers; Linux also runs Chromium integration tests.
+
+### Run and deployment
+
+Start Java with `scripts/run.ps1` and React in another terminal with `scripts/frontend.ps1` (or the `.sh` equivalents). Open **http://localhost:5173**. Port 8080 is API-only. Node.js 24.15+ LTS and JDK 17+ are required for the documented workflow. The frontend script uses `npm ci` on first run; reinstall after dependency changes.
+
+`npm --prefix frontend run build` produces `frontend/dist`. Deploy those static files behind a web server that proxies `/api`, `/r` and `/health` to Java. Set `BASE_URL` to the public origin and apply the documented CSP at that web server. Vite dev/preview are local tools, not the production server.
+
+### Validation
+
+- 52 Java tests pass, including persistence, concurrency and all previous feature checks. The former UI route test now asserts Java returns 404 for `/`, `/app.js` and `/style.css`.
+- 11 React component tests pass: creation/form fields, copy, conflict/error messages, expired-link renewal, uncertain-request handling, confirmation/cancel, disable retention, non-expiring/disabled restrictions, lookup changes, pending controls and missing-backend errors.
+- Frontend production build and 2 headless Chromium integration tests pass against the real Java API through the frontend proxy, including redirects, expiry, confirmation/cancel, disable, reload, conflicts, native alias validation and a mobile-width overflow check. Total: **65 passing checks**. The standard Playwright browser download was unavailable in this environment; local execution used an npm-packaged Chromium binary with a temporary test configuration. CI uses Playwright’s standard Chromium.
+- Windows scripts and CI are configured; local execution was on Linux. Remote CI results are separate evidence.
 
 ## F002 — Extend expiry
 

@@ -51,13 +51,7 @@ public final class ShortenerServer implements AutoCloseable {
         headers.set("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'");
         try {
             String path = exchange.getRequestURI().getRawPath();
-            if (path.equals("/") || path.equals("/app.js") || path.equals("/style.css")) {
-                requireMethod(exchange, "GET");
-                status = 200;
-                if (path.equals("/")) send(exchange, status, "text/html", Ui.HTML);
-                else if (path.equals("/app.js")) send(exchange, status, "application/javascript", Ui.JS);
-                else send(exchange, status, "text/css", Ui.CSS);
-            } else if (path.equals("/health")) {
+            if (path.equals("/health")) {
                 requireMethod(exchange, "GET");
                 status = 200;
                 send(exchange, status, "application/json", "{\"status\":\"up\"}");

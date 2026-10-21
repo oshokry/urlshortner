@@ -335,11 +335,11 @@ public final class ShortenerTests {
              ShortenerServer server = new ShortenerServer(new InetSocketAddress("127.0.0.1", 0), store, CLOCK, null)) {
             server.start();
             String base = "http://127.0.0.1:" + server.port();
-            test("HTTP health and UI", () -> {
+            test("HTTP health and backend-only routes", () -> {
                 check(get(client, base + "/health").statusCode() == 200, "Health");
-                check(get(client, base).body().contains("Create a short link"), "UI");
-                check(get(client, base + "/app.js").statusCode() == 200, "Script");
-                check(get(client, base + "/style.css").statusCode() == 200, "Styles");
+                check(get(client, base).statusCode() == 404, "UI belongs to React frontend");
+                check(get(client, base + "/app.js").statusCode() == 404, "No embedded script");
+                check(get(client, base + "/style.css").statusCode() == 404, "No embedded stylesheet");
             });
             test("HTTP create returns 201 and resource Location", () -> {
                 var response = post(client, base, "url=https%3A%2F%2Fexample.com%2F%3Fa%3D1%26b%3D2&alias=webdemo", "application/x-www-form-urlencoded");
