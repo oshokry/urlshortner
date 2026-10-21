@@ -4,14 +4,32 @@ Keep this file as the running history of feature additions. Keep the most recent
 
 | ID | Feature | Type | Implementation status |
 |---|---|---|---|
+| F005 | Saved links beside analytics | Frontend layout | Implemented; desktop/mobile layout checks passed |
 | F004 | List saved links | Brownfield enhancement | Implemented; 80 tests passed locally |
 | F003 | Separate React frontend | Architecture refactor | Implemented; 65 tests passed locally |
 | F002 | Extend expiry | Brownfield enhancement | Implemented; 52 tests passed locally |
 | F001 | Disable a short link | Brownfield enhancement | Implemented; 39 tests passed locally |
 
-## F004 — List saved links
+## F005 — Saved links beside analytics
 
-**Latest update — 2026-10-21:** Moved Saved links to the right of Link analytics in a three-column desktop layout. Panels stack on screens up to 1100px; wide tables scroll within their panel. Updated positional instructions. Production build and browser layout checks passed at 1800px, 1280px, 1000px and 390px.
+**Added:** 2026-10-21  
+**Request:** Move Saved links to the right of Link analytics.  
+**Status:** Implemented and pushed. Frontend layout change only; no Java, API or persistence changes.
+
+### Behavior and affected components
+
+- Desktop panels appear left to right: **Create a short link → Link analytics → Saved links**.
+- At widths of 1100px or less, the panels stack vertically. Wide tables scroll inside Saved links without overflowing the page.
+- `frontend/src/App.jsx` places all three panels in one grid. `frontend/src/styles.css` widens the page and defines responsive columns.
+- Updated positional text in `LinkList.jsx`, its matching test expectation, and the README.
+
+### Validation and rollout
+
+The frontend production build passed. Headless browser layout checks passed at **1800px, 1280px, 1000px and 390px**, including a populated table with a long destination URL. Checks confirmed that Saved links sits to the right of analytics on desktop, stacks below on smaller screens, and causes no page overflow. The full backend suite was not rerun for this frontend-only change.
+
+Run `git pull` and refresh the browser while the frontend development server is running. No Java restart is needed. For a built deployment, rebuild and redeploy the frontend assets.
+
+## F004 — List saved links
 
 **Added:** 2026-10-21  
 **Request:** Implement scenario 3, List links, with Java backend and React UI. Preserve the small-change budget and keep this tracker newest first.  
