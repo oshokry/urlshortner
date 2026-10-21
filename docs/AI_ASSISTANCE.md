@@ -44,3 +44,7 @@ Before submission, the engineer should:
 - Own the limitation that public deployment needs auth, abuse controls and operational hardening.
 
 Before high-impact production actions, require explicit human review/sign-off for security, schema changes, rollout and rollback. This repository contains a local prototype, not approval to deploy to production.
+
+## Subsequent brownfield task
+
+The engineer selected persistent link deactivation with a 100-line production-code limit. AI analyzed both redirect methods, replay and the existing lock, then implemented the endpoint and UI behavior in 77 changed production lines. Twelve new tests pass alongside the original 27. See [FeatureTracker.md](FeatureTracker.md) for decomposition, compatibility risks and review evidence. The earlier table describes the initial greenfield scope; this later work adds the requested brownfield slice. Publication was requested by the engineer; automated checks do not constitute production sign-off.

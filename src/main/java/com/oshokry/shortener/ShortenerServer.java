@@ -75,10 +75,16 @@ public final class ShortenerServer implements AutoCloseable {
                 headers.set("Location", "/api/links/" + link.code());
                 send(exchange, status, "application/json", json(link));
             } else if (path.startsWith("/api/links/")) {
-                requireMethod(exchange, "GET");
-                Link link = service.stats(path.substring("/api/links/".length()));
-                status = 200;
-                send(exchange, status, "application/json", json(link));
+                requireMethod(exchange, "GET", "DELETE");
+                String code = path.substring("/api/links/".length());
+                if (exchange.getRequestMethod().equals("DELETE")) {
+                    service.disable(code);
+                    status = 204;
+                    exchange.sendResponseHeaders(status, -1);
+                } else {
+                    status = 200;
+                    send(exchange, status, "application/json", json(service.stats(code)));
+                }
             } else if (path.startsWith("/r/")) {
                 String method = exchange.getRequestMethod();
                 if (!method.equals("GET") && !method.equals("HEAD")) {
@@ -88,6 +94,7 @@ public final class ShortenerServer implements AutoCloseable {
                 Link link;
                 if (method.equals("HEAD")) {
                     link = service.stats(code);
+                    if (link.disabled()) throw new ApiException(410, "Short link has been disabled");
                     if (service.expired(link)) throw new ApiException(410, "Short link has expired");
                 } else link = service.resolve(code);
                 status = 302;
@@ -111,9 +118,9 @@ public final class ShortenerServer implements AutoCloseable {
             System.out.printf("request status=%d duration_ms=%.2f%n", status, (System.nanoTime() - started) / 1_000_000.0);
         }
     }
-    private static void requireMethod(HttpExchange e, String method) {
-        if (!e.getRequestMethod().equals(method)) {
-            e.getResponseHeaders().set("Allow", method);
+    private static void requireMethod(HttpExchange e, String... methods) {
+        if (!Set.of(methods).contains(e.getRequestMethod())) {
+            e.getResponseHeaders().set("Allow", String.join(", ", methods));
             throw new ApiException(405, "Method not allowed");
         }
     }
@@ -136,7 +143,7 @@ public final class ShortenerServer implements AutoCloseable {
                 + ",\"url\":" + quote(link.url()) + ",\"createdAt\":" + quote(link.createdAt().toString())
                 + ",\"expiresAt\":" + quote(link.expiresAt() == null ? null : link.expiresAt().toString())
                 + ",\"clicks\":" + link.clicks() + ",\"lastClickedAt\":" + quote(link.lastClickedAt() == null ? null : link.lastClickedAt().toString())
-                + ",\"expired\":" + service.expired(link) + "}";
+                + ",\"expired\":" + service.expired(link) + ",\"disabled\":" + link.disabled() + "}";
     }
     static String quote(String value) {
         if (value == null) return "null";

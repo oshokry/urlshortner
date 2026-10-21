@@ -66,8 +66,12 @@ public final class JournalLinkStore implements LinkStore {
                 if (links.putIfAbsent(link.code(), link) != null) throw new IllegalArgumentException("duplicate code");
             } else if (fields.length == 3 && fields[0].equals("V")) {
                 Link link = links.get(fields[1]);
-                if (link == null) throw new IllegalArgumentException("visit without link");
+                if (link == null || link.disabled()) throw new IllegalArgumentException("visit without active link");
                 links.put(link.code(), link.clicked(Instant.parse(fields[2])));
+            } else if (fields.length == 2 && fields[0].equals("D")) {
+                Link link = links.get(fields[1]);
+                if (link == null) throw new IllegalArgumentException("disable without link");
+                links.put(link.code(), link.disable());
             } else throw new IllegalArgumentException("unknown record");
         } catch (RuntimeException e) {
             throw new IOException("Invalid journal record; refusing to serve inconsistent data", e);
@@ -96,9 +100,18 @@ public final class JournalLinkStore implements LinkStore {
 
     @Override public synchronized Link find(String code) { return links.get(code); }
 
+    @Override public synchronized void disable(String code) throws IOException {
+        Link link = links.get(code);
+        if (link == null) throw new ApiException(404, "Short link not found");
+        if (link.disabled()) return;
+        append("D\t" + code);
+        links.put(code, link.disable());
+    }
+
     @Override public synchronized Link visit(String code, Instant now) throws IOException {
         Link link = links.get(code);
         if (link == null) throw new ApiException(404, "Short link not found");
+        if (link.disabled()) throw new ApiException(410, "Short link has been disabled");
         if (link.expired(now)) throw new ApiException(410, "Short link has expired");
         Link updated = link.clicked(now);
         append("V\t" + code + "\t" + now);

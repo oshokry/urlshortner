@@ -77,4 +77,4 @@ This is not a general-purpose transactional database: no checksums for detecting
 4. Add real readiness, structured metrics/traces and alerts. Run load, disk failure, shutdown and recovery tests.
 5. Cache redirect lookups if measured traffic needs it. Consider durable async analytics with documented eventual consistency and duplicate-handling semantics.
 
-Brownfield and ambiguous scenarios remain separate assignment work. This document makes greenfield assumptions explicit; it does not claim to deliver all three scenarios.
+The subsequent [brownfield deactivation scenario](FeatureTracker.md) documents its own impact analysis, implementation and validation. The full ambiguous scenario remains separate assignment work; this does not claim to deliver all three scenarios.

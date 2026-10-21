@@ -1,6 +1,6 @@
 # Shortly — Java URL shortener
 
-A runnable **greenfield interview prototype**: create short links, redirect to their destinations, and inspect persistent click analytics. Java 17, standard library only. No Maven, database installation, API keys, or network access needed to build or run.
+A runnable **Java URL shortener prototype**: create short links, inspect persistent click analytics, and disable links through the browser UI or API. Java 17, standard library only. No Maven, database installation, API keys, or network access needed to build or run.
 
 ## Start here — Windows
 
@@ -40,6 +40,17 @@ The scripts invoke the JDK compiler module directly and compile with `--release 
 
 Start with [the interview walkthrough](docs/INTERVIEW.md) for the explanation and likely questions.
 
+## Disable a link in the UI
+
+1. Create a link, or enter its short code in **Link analytics** and click **Refresh**.
+2. Click the red **Disable <code>** button and confirm the code in the confirmation dialog. Cancel leaves the link unchanged.
+3. The status changes to **Disabled**, the button becomes **Link disabled**, and the click history stays visible.
+4. Opening the short link now returns **410 Gone**. Restarting the app preserves the disabled state.
+
+Disabling is permanent through this API. Editing the lookup code disables the action button until you refresh, so the action targets the link whose analytics are displayed. No terminal commands are needed for this feature.
+
+Track this and future additions in [docs/FeatureTracker.md](docs/FeatureTracker.md).
+
 ## What works
 
 - Random eight-character base62 codes; custom aliases; atomic uniqueness and bounded collision retry.
@@ -50,15 +61,17 @@ Start with [the interview walkthrough](docs/INTERVIEW.md) for the explanation an
 - HTTP(S) URL validation, credential/newline rejection, body size limit, creation rate limit.
 - Bounded worker queue, security headers, payload-free request logs, liveness endpoint.
 - Browser UI, API/schema contract, regression tests, and GitHub Actions workflow.
+- Brownfield enhancement: disable a link from the UI or API; retain analytics and persist the disabled state.
 
 ## API
 
 | Method | Endpoint | Behavior |
 |---|---|---|
 | POST | `/api/links` | Create; form-encoded body; returns 201 and JSON |
-| GET | `/r/{code}` | Count and redirect, 302; 404 unknown; 410 expired |
+| GET | `/r/{code}` | Count and redirect, 302; 404 unknown; 410 expired or disabled |
 | HEAD | `/r/{code}` | Resolve without counting |
-| GET | `/api/links/{code}` | Metadata and analytics as JSON, including expired links |
+| GET | `/api/links/{code}` | Metadata and analytics as JSON, including expired and disabled links |
+| DELETE | `/api/links/{code}` | Permanently disable; 204 even if already disabled; 404 if unknown |
 | GET | `/health` | Process liveness; 200 `{"status":"up"}` |
 | GET | `/` | Browser demo |
 
@@ -85,7 +98,8 @@ Windows: use `curl.exe` and put each command on one line. Do not use `-L` when d
   "expiresAt": "2026-10-21T13:00:00Z",
   "clicks": 0,
   "lastClickedAt": null,
-  "expired": false
+  "expired": false,
+  "disabled": false
 }
 ```
 
@@ -125,11 +139,12 @@ flowchart TD
 - [AI assistance record and engineer review checklist](docs/AI_ASSISTANCE.md)
 - [Interview walkthrough](docs/INTERVIEW.md)
 - [API contract](docs/openapi.yaml)
+- [Feature tracker: implementation history, demos and validation](docs/FeatureTracker.md)
 
-**Validation:** 27 automated tests passed on Java 17, including real HTTP requests, concurrent creation/click updates, expiry boundaries, persistence, crash-tail recovery, corrupt-journal refusal, collision exhaustion, validation, and throttling. Compilation treats warnings as errors. CI is configured but its remote run must be verified after publishing.
+**Validation:** 39 automated tests passed locally on Java 17: the original 27 plus 12 deactivation checks covering HTTP behavior, persistence, concurrency, idempotency and write failures. Compilation treats warnings as errors. CI is configured for Linux and Windows; remote results must be verified after publishing.
 
 ## Scope and limitations
 
-This submission implements the requested **greenfield portion**, not the assignment's full three-scenario exercise. It demonstrates production-minded choices in a small prototype; it is **not ready for public production deployment**. No authentication, owner-level analytics authorization, abuse screening, distributed storage, TLS termination, journal compaction or deletion/retention policy is included. Data and analytics are visible to anyone who knows a code. Bind locally for the demo.
+This submission implements the **greenfield portion and a small brownfield deactivation scenario**, not the assignment's full three-scenario exercise. It demonstrates production-minded choices in a small prototype; it is **not ready for public production deployment**. No authentication, owner-level authorization, abuse screening, distributed storage, TLS termination, journal compaction or data-erasure/retention policy is included. Anyone with a code can read its analytics or disable it. Bind locally for the demo. Deactivation retains data and is permanent through the API.
 
 The journal serializes and syncs every write; this trades throughput for a clear durability model. Total redirects are not unique visitors and do not prove the destination page loaded. A crash after commit but before HTTP delivery can leave a committed operation without a received response. Health is liveness only, not disk readiness. Review [the documented next steps](docs/ENGINEERING.md) before treating this as a production design.

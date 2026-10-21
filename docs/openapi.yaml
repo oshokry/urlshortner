@@ -76,7 +76,7 @@ paths:
       - {$ref: '#/components/parameters/Code'}
     get:
       operationId: getLinkStats
-      summary: Read link metadata and analytics, even after expiry
+      summary: Read link metadata and analytics, including expired or disabled links
       responses:
         '200':
           description: Link metadata
@@ -84,6 +84,15 @@ paths:
             application/json:
               schema: {$ref: '#/components/schemas/Link'}
         '404': {$ref: '#/components/responses/NotFound'}
+    delete:
+      operationId: disableLink
+      summary: Permanently disable a link while retaining metadata, analytics and its reserved code
+      description: Idempotent for existing links. Local demo has no authentication. No reactivation endpoint.
+      responses:
+        '204':
+          description: Link disabled or already disabled; no response body.
+        '404': {$ref: '#/components/responses/NotFound'}
+        '503': {$ref: '#/components/responses/Unavailable'}
   /r/{code}:
     parameters:
       - {$ref: '#/components/parameters/Code'}
@@ -101,7 +110,7 @@ paths:
       responses:
         '302': {$ref: '#/components/responses/Redirect'}
         '404': {description: Unknown code; no response body.}
-        '410': {description: Expired link; no response body.}
+        '410': {description: Expired or disabled link; no response body.}
   /health:
     get:
       operationId: liveness
@@ -128,7 +137,7 @@ components:
   schemas:
     Link:
       type: object
-      required: [code, shortUrl, url, createdAt, expiresAt, clicks, lastClickedAt, expired]
+      required: [code, shortUrl, url, createdAt, expiresAt, clicks, lastClickedAt, expired, disabled]
       properties:
         code: {type: string}
         shortUrl: {type: string, format: uri}
@@ -142,6 +151,7 @@ components:
           description: Committed GET redirect attempts, not unique visitors or confirmed page loads.
         lastClickedAt: {type: string, format: date-time, nullable: true}
         expired: {type: boolean}
+        disabled: {type: boolean, description: Permanently deactivated independently of expiry.}
     Error:
       type: object
       required: [error]
@@ -166,7 +176,7 @@ components:
         application/json:
           schema: {$ref: '#/components/schemas/Error'}
     Gone:
-      description: Link has expired; no click recorded.
+      description: Link has expired or been disabled; no click recorded.
       content:
         application/json:
           schema: {$ref: '#/components/schemas/Error'}

@@ -144,6 +144,7 @@ public final class ShortenerTests {
                 public boolean create(Link link) throws IOException { throw new IOException("disk full"); }
                 public Link find(String code) { return null; }
                 public Link visit(String code, Instant now) throws IOException { throw new IOException("disk full"); }
+                public void disable(String code) throws IOException { throw new IOException("disk full"); }
                 public void close() { }
             };
             try { new ShortenerService(broken, CLOCK).create("https://example.com", null, null); throw new AssertionError("Acknowledged failed write"); }
@@ -156,7 +157,84 @@ public final class ShortenerTests {
             check(ShortenerServer.parseForm("url=https%3A%2F%2Fexample.com%2F%3Fa%3Db%26c%3Dd").get("url").equals("https://example.com/?a=b&c=d"), "Query survives encoding");
         });
         test("JSON response escaping", () -> check(ShortenerServer.quote("a\"b\\c\n").equals("\"a\\\"b\\\\c\\u000a\""), "JSON strings escaped"));
+        deactivationTests(dir);
         httpTests(dir);
+    }
+    private static void deactivationTests(Path dir) throws Exception {
+        Path journal = dir.resolve("disable.journal");
+        try (JournalLinkStore store = new JournalLinkStore(journal)) {
+            ShortenerService service = new ShortenerService(store, CLOCK);
+            test("disable preserves metadata, clicks and reserved alias", () -> {
+                Link original = service.create("https://example.com", "disable-demo", "60");
+                service.resolve(original.code());
+                service.disable(original.code());
+                Link disabled = service.stats(original.code());
+                check(disabled.disabled() && !disabled.expired(NOW), "Disabled is distinct from expired");
+                check(disabled.clicks() == 1 && disabled.lastClickedAt().equals(NOW), "Analytics retained");
+                check(disabled.url().equals(original.url()) && disabled.expiresAt().equals(original.expiresAt()), "Metadata retained");
+                error(410, () -> service.resolve(original.code()));
+                check(service.stats(original.code()).clicks() == 1, "Blocked visit not counted");
+                error(409, () -> service.create("https://other.example", original.code(), null));
+            });
+            test("repeated disable is idempotent without extra journal records", () -> {
+                long size = Files.size(journal);
+                service.disable("disable-demo");
+                check(Files.size(journal) == size, "No duplicate event");
+            });
+            test("disable rejects missing and malformed codes", () -> {
+                error(404, () -> service.disable("missing"));
+                error(404, () -> service.disable("../bad"));
+                error(404, () -> service.disable(null));
+            });
+            test("expired link can also be disabled", () -> {
+                service.create("https://example.com", "old-link", "1");
+                var later = new ShortenerService(store, Clock.fixed(NOW.plusSeconds(2), ZoneOffset.UTC));
+                later.disable("old-link");
+                check(later.stats("old-link").disabled() && later.expired(later.stats("old-link")), "Both states preserved");
+            });
+            test("concurrent disable and visits have consistent analytics", () -> {
+                service.create("https://example.com", "disable-race", null);
+                var pool = Executors.newFixedThreadPool(8);
+                AtomicInteger visits = new AtomicInteger();
+                try {
+                    List<Callable<Void>> tasks = new ArrayList<>();
+                    for (int i = 0; i < 50; i++) {
+                        if (i == 20) tasks.add(() -> { service.disable("disable-race"); return null; });
+                        tasks.add(() -> {
+                            try { service.resolve("disable-race"); visits.incrementAndGet(); }
+                            catch (ApiException e) { check(e.status() == 410, "Only disabled visits fail"); }
+                            return null;
+                        });
+                    }
+                    for (var result : pool.invokeAll(tasks)) result.get();
+                    check(service.stats("disable-race").disabled(), "Disable committed");
+                    check(service.stats("disable-race").clicks() == visits.get(), "Count exactly successful visits");
+                    error(410, () -> service.resolve("disable-race"));
+                } finally { pool.shutdownNow(); }
+            });
+        }
+        test("disabled status and analytics survive journal replay", () -> {
+            try (JournalLinkStore store = new JournalLinkStore(journal)) {
+                ShortenerService service = new ShortenerService(store, CLOCK);
+                check(service.stats("disable-demo").disabled() && service.stats("disable-demo").clicks() == 1, "Replay retains state");
+                error(410, () -> service.resolve("disable-demo"));
+                service.disable("disable-demo");
+            }
+        });
+        test("failed disable write does not publish disabled state", () -> {
+            JournalLinkStore store = new JournalLinkStore(dir.resolve("disable-failure.journal"));
+            ShortenerService service = new ShortenerService(store, CLOCK);
+            service.create("https://example.com", "failure", null);
+            store.close();
+            try { service.disable("failure"); throw new AssertionError("Acknowledged failed disable"); }
+            catch (IOException expected) { check(!service.stats("failure").disabled(), "State unchanged after failed append"); }
+        });
+        test("orphan disable event fails startup", () -> {
+            Path corrupt = dir.resolve("orphan-disable.journal");
+            Files.writeString(corrupt, "D\tmissing\n");
+            try (JournalLinkStore store = new JournalLinkStore(corrupt)) { store.find("missing"); throw new AssertionError("Accepted orphan event"); }
+            catch (IOException expected) { check(expected.getMessage().contains("Invalid journal"), "Fail closed"); }
+        });
     }
     private static void httpTests(Path dir) throws Exception {
         HttpClient client = HttpClient.newBuilder().followRedirects(HttpClient.Redirect.NEVER).connectTimeout(Duration.ofSeconds(3)).build();
@@ -214,7 +292,35 @@ public final class ShortenerTests {
                 }
                 check(limited, "Rate limit enforced");
             });
+            test("HTTP DELETE returns empty 204 and is idempotent", () -> {
+                for (int i = 0; i < 2; i++) {
+                    var response = method(client, base + "/api/links/webdemo", "DELETE");
+                    check(response.statusCode() == 204 && response.body().isEmpty(), "Empty idempotent response");
+                }
+            });
+            test("HTTP disabled GET and HEAD return 410 without redirect or clicks", () -> {
+                for (String method : List.of("GET", "HEAD")) {
+                    var response = method(client, base + "/r/webdemo", method);
+                    check(response.statusCode() == 410 && response.headers().firstValue("Location").isEmpty(), "No redirect");
+                    if (method.equals("HEAD")) check(response.body().isEmpty(), "No HEAD body");
+                }
+                check(store.find("webdemo").clicks() == 1, "No disabled clicks");
+            });
+            test("HTTP disabled metadata stays readable", () -> {
+                var response = get(client, base + "/api/links/webdemo");
+                check(response.statusCode() == 200 && response.body().contains("\"disabled\":true"), "Disabled field");
+                check(response.body().contains("\"clicks\":1") && response.body().contains("\"expired\":false"), "History and expiry unchanged");
+            });
+            test("HTTP disable missing code and method contract", () -> {
+                check(method(client, base + "/api/links/nope", "DELETE").statusCode() == 404, "Missing link");
+                var response = method(client, base + "/api/links/webdemo", "PUT");
+                check(response.statusCode() == 405 && response.headers().firstValue("Allow").orElse("").equals("GET, DELETE"), "Allowed methods");
+            });
         }
+    }
+    private static HttpResponse<String> method(HttpClient client, String url, String method) throws Exception {
+        return client.send(HttpRequest.newBuilder(URI.create(url)).timeout(Duration.ofSeconds(5))
+                .method(method, HttpRequest.BodyPublishers.noBody()).build(), HttpResponse.BodyHandlers.ofString());
     }
     private static HttpResponse<String> get(HttpClient client, String url) throws Exception {
         return client.send(HttpRequest.newBuilder(URI.create(url)).timeout(Duration.ofSeconds(5)).GET().build(), HttpResponse.BodyHandlers.ofString());

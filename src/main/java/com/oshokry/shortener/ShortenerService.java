@@ -55,6 +55,10 @@ public final class ShortenerService {
         return store.visit(code, clock.instant());
     }
     public boolean expired(Link link) { return link.expired(clock.instant()); }
+    public void disable(String code) throws IOException {
+        if (!validCode(code)) throw new ApiException(404, "Short link not found");
+        store.disable(code);
+    }
     public static boolean validCode(String code) { return code != null && code.matches("[A-Za-z0-9_-]{4,32}"); }
     static String validateUrl(String raw) {
         if (raw == null || raw.isBlank()) throw new ApiException(400, "url is required");
