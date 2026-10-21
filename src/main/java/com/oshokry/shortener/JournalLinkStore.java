@@ -3,6 +3,7 @@ package com.oshokry.shortener;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.nio.channels.Channels;
 import java.nio.channels.FileChannel;
 import java.nio.channels.FileLock;
 import java.nio.channels.OverlappingFileLockException;
@@ -40,10 +41,13 @@ public final class JournalLinkStore implements LinkStore {
                 completeLength--;
             }
             channel.truncate(completeLength);
-            try (BufferedReader reader = Files.newBufferedReader(path, StandardCharsets.UTF_8)) {
-                String line;
-                while ((line = reader.readLine()) != null) replay(line);
-            }
+            // Windows enforces the lock against other handles, even in this
+            // process. Replay through the SAME channel that owns the lock.
+            // Do not close this reader: that would close the store's channel.
+            channel.position(0);
+            BufferedReader reader = new BufferedReader(Channels.newReader(channel, StandardCharsets.UTF_8));
+            String line;
+            while ((line = reader.readLine()) != null) replay(line);
             channel.position(completeLength);
         } catch (IOException | RuntimeException e) {
             if (acquired != null) acquired.release();
