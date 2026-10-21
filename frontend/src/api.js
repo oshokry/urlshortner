@@ -9,6 +9,7 @@ async function request(path, options) {
 }
 const linkPath = code => '/api/links/' + encodeURIComponent(code);
 export const api = {
+  list: () => request('/api/links'),
   create: values => request('/api/links', { method: 'POST', body: new URLSearchParams(values) }),
   stats: code => request(linkPath(code)),
   extend: (code, ttlSeconds) => request(linkPath(code), { method: 'PATCH', body: new URLSearchParams({ ttlSeconds }) }),

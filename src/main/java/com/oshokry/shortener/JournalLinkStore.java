@@ -15,6 +15,8 @@ import java.time.Instant;
 import java.util.Base64;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.List;
+import java.util.Comparator;
 
 /** Single-process append-only journal. Force to disk BEFORE publishing a mutation. */
 public final class JournalLinkStore implements LinkStore {
@@ -102,6 +104,10 @@ public final class JournalLinkStore implements LinkStore {
                 + "\t" + link.createdAt() + "\t" + (link.expiresAt() == null ? "" : link.expiresAt()));
         links.put(link.code(), link);
         return true;
+    }
+
+    @Override public synchronized List<Link> list() {
+        return links.values().stream().sorted(Comparator.comparing(Link::createdAt).reversed().thenComparing(Link::code)).toList();
     }
 
     @Override public synchronized Link find(String code) { return links.get(code); }

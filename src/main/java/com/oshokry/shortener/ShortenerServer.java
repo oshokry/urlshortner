@@ -56,7 +56,13 @@ public final class ShortenerServer implements AutoCloseable {
                 status = 200;
                 send(exchange, status, "application/json", "{\"status\":\"up\"}");
             } else if (path.equals("/api/links")) {
-                requireMethod(exchange, "POST");
+                requireMethod(exchange, "GET", "POST");
+                if (exchange.getRequestMethod().equals("GET")) {
+                    status = 200;
+                    send(exchange, status, "application/json", service.list().stream().map(this::json)
+                            .collect(java.util.stream.Collectors.joining(",", "[", "]")));
+                    return;
+                }
                 if (!limiter.allow()) { headers.set("Retry-After", "1"); throw new ApiException(429, "Creation rate exceeded; retry later"); }
                 String contentType = exchange.getRequestHeaders().getFirst("Content-Type");
                 if (contentType == null || !contentType.split(";", 2)[0].trim().equalsIgnoreCase("application/x-www-form-urlencoded"))

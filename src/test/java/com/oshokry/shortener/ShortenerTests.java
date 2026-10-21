@@ -143,6 +143,7 @@ public final class ShortenerTests {
             LinkStore broken = new LinkStore() {
                 public boolean create(Link link) throws IOException { throw new IOException("disk full"); }
                 public Link find(String code) { return null; }
+                public List<Link> list() { return List.of(); }
                 public Link visit(String code, Instant now) throws IOException { throw new IOException("disk full"); }
                 public void disable(String code) throws IOException { throw new IOException("disk full"); }
                 public Link extend(String code, long seconds, Instant now) throws IOException { throw new IOException("disk full"); }
@@ -160,6 +161,7 @@ public final class ShortenerTests {
         test("JSON response escaping", () -> check(ShortenerServer.quote("a\"b\\c\n").equals("\"a\\\"b\\\\c\\u000a\""), "JSON strings escaped"));
         deactivationTests(dir);
         expiryExtensionTests(dir);
+        listTests(dir);
         httpTests(dir);
     }
     private static void expiryExtensionTests(Path dir) throws Exception {
@@ -329,6 +331,75 @@ public final class ShortenerTests {
             catch (IOException expected) { check(expected.getMessage().contains("Invalid journal"), "Fail closed"); }
         });
     }
+    private static void listTests(Path dir) throws Exception {
+        Path journal = dir.resolve("list.journal");
+        List<Link> saved;
+        try (JournalLinkStore store = new JournalLinkStore(journal)) {
+            ShortenerService service = new ShortenerService(store, CLOCK);
+            test("list empty store returns immutable empty snapshot", () -> {
+                check(service.list().isEmpty(), "Empty list");
+                try { service.list().add(new Link("nope", "https://example.com", NOW, null, 0, null)); throw new AssertionError("Mutable list"); }
+                catch (UnsupportedOperationException expected) { check(store.list().isEmpty(), "Store unchanged"); }
+            });
+            store.create(new Link("oldest", "https://example.com/old", NOW.minusSeconds(10), NOW.minusSeconds(5), 0, null));
+            service.create("https://example.com/beta", "beta", null);
+            service.create("https://example.com/alpha", "alpha", "60");
+            service.resolve("alpha");
+            service.disable("beta");
+            test("list newest first with deterministic code tie-break and all states", () -> {
+                List<Link> links = service.list();
+                check(links.stream().map(Link::code).toList().equals(List.of("alpha", "beta", "oldest")), "Newest first, ascending code for ties");
+                check(links.get(0).clicks() == 1 && links.get(1).disabled() && service.expired(links.get(2)), "Analytics and all states retained");
+                check(links.get(1).expiresAt() == null, "Never-expiring included");
+            });
+            test("list reads neither increment clicks nor append journal events", () -> {
+                long size = Files.size(journal);
+                List<Link> snapshot = service.list();
+                for (int i = 0; i < 5; i++) check(service.list().equals(snapshot), "Read-only snapshot");
+                check(Files.size(journal) == size && service.stats("alpha").clicks() == 1, "No side effects");
+                service.resolve("alpha");
+                check(snapshot.get(0).clicks() == 1 && service.list().get(0).clicks() == 2, "Prior snapshot not changed by later writes");
+            });
+            HttpClient client = HttpClient.newHttpClient();
+            try (ShortenerServer server = new ShortenerServer(new InetSocketAddress("127.0.0.1", 0), store, CLOCK, null)) {
+                server.start(); String base = "http://127.0.0.1:" + server.port();
+                test("HTTP list matches metadata contract in stable order with no side effects", () -> {
+                    long size = Files.size(journal);
+                    var response = get(client, base + "/api/links");
+                    String expected = "[" + get(client, base + "/api/links/alpha").body() + ","
+                            + get(client, base + "/api/links/beta").body() + "," + get(client, base + "/api/links/oldest").body() + "]";
+                    check(response.statusCode() == 200 && response.body().equals(expected), "Complete ordered metadata");
+                    check(response.headers().firstValue("Content-Type").orElse("").startsWith("application/json"), "JSON response");
+                    check(response.headers().firstValue("Cache-Control").orElse("").equals("no-store"), "Fresh snapshot");
+                    check(Files.size(journal) == size, "No journal writes from list or metadata");
+                });
+            }
+            test("concurrent creates and lists preserve unique sorted snapshots", () -> {
+                var pool = Executors.newFixedThreadPool(6);
+                try {
+                    List<Callable<Void>> tasks = new ArrayList<>();
+                    for (int i = 0; i < 30; i++) {
+                        final int index = i;
+                        tasks.add(() -> {
+                            service.create("https://example.com", "list-" + index, null);
+                            List<Link> snapshot = service.list();
+                            check(snapshot.stream().map(Link::code).distinct().count() == snapshot.size(), "No duplicates");
+                            check(snapshot.equals(snapshot.stream().sorted(java.util.Comparator.comparing(Link::createdAt).reversed().thenComparing(Link::code)).toList()), "Sorted snapshot");
+                            return null;
+                        });
+                    }
+                    for (var result : pool.invokeAll(tasks)) result.get();
+                } finally { pool.shutdownNow(); }
+                check(service.list().size() == 33, "Every committed link listed");
+            });
+            saved = service.list();
+        }
+        test("list survives journal replay with counts, states and ordering", () -> {
+            try (JournalLinkStore reopened = new JournalLinkStore(journal)) {
+                check(reopened.list().equals(saved), "Same saved links after reopen");
+            }
+        });
+    }
     private static void httpTests(Path dir) throws Exception {
         HttpClient client = HttpClient.newBuilder().followRedirects(HttpClient.Redirect.NEVER).connectTimeout(Duration.ofSeconds(3)).build();
         try (JournalLinkStore store = new JournalLinkStore(dir.resolve("http.journal"));
@@ -340,6 +411,10 @@ public final class ShortenerTests {
                 check(get(client, base).statusCode() == 404, "UI belongs to React frontend");
                 check(get(client, base + "/app.js").statusCode() == 404, "No embedded script");
                 check(get(client, base + "/style.css").statusCode() == 404, "No embedded stylesheet");
+            });
+            test("HTTP list on empty store returns an empty JSON array", () -> {
+                var response = get(client, base + "/api/links");
+                check(response.statusCode() == 200 && response.body().equals("[]"), "Empty array, not 404 or null");
             });
             test("HTTP create returns 201 and resource Location", () -> {
                 var response = post(client, base, "url=https%3A%2F%2Fexample.com%2F%3Fa%3D1%26b%3D2&alias=webdemo", "application/x-www-form-urlencoded");
@@ -362,8 +437,8 @@ public final class ShortenerTests {
             test("HTTP duplicate, missing and wrong method", () -> {
                 check(post(client, base, "url=https%3A%2F%2Fexample.com&alias=webdemo", "application/x-www-form-urlencoded").statusCode() == 409, "Duplicate");
                 check(get(client, base + "/r/missing").statusCode() == 404, "Missing");
-                var response = get(client, base + "/api/links");
-                check(response.statusCode() == 405 && response.headers().firstValue("Allow").orElse("").equals("POST"), "Method contract");
+                var response = client.send(HttpRequest.newBuilder(URI.create(base + "/api/links")).DELETE().build(), HttpResponse.BodyHandlers.ofString());
+                check(response.statusCode() == 405 && response.headers().firstValue("Allow").orElse("").equals("GET, POST"), "Method contract");
             });
             test("HTTP expiry returns 410 without click", () -> {
                 store.create(new Link("expired", "https://example.com", NOW.minusSeconds(60), NOW, 0, null));
@@ -384,6 +459,9 @@ public final class ShortenerTests {
                     }
                 }
                 check(limited, "Rate limit enforced");
+            });
+            test("HTTP listing remains available when creation is rate limited", () -> {
+                check(get(client, base + "/api/links").statusCode() == 200, "GET is independent of creation limiter");
             });
             test("HTTP DELETE returns empty 204 and is idempotent", () -> {
                 for (int i = 0; i < 2; i++) {

@@ -7,6 +7,18 @@ servers:
   - url: http://localhost:8080
 paths:
   /api/links:
+    get:
+      operationId: listLinks
+      summary: List all saved links, newest first
+      description: Includes active, expired and disabled links. Equal creation times sort by code ascending. Read-only; no click increments. Local demo has no authentication or pagination; returns all links.
+      responses:
+        '200':
+          description: Link snapshots; empty array when no links exist.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: '#/components/schemas/Link'}
     post:
       operationId: createLink
       summary: Create a short link

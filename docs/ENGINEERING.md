@@ -63,7 +63,7 @@ This is not a general-purpose transactional database: no checksums for detecting
 ## Quality gates and observed results
 
 - Java 17 compilation with `--release 17 -Xlint:all -Werror`: passed.
-- 52 Java tests, 11 React component tests and 2 headless browser integration tests: passed. Frontend production build: passed. Includes genuine local HTTP requests, 24 concurrent alias creations (one winner), 100 concurrent visits (no lost updates), deterministic expiry boundaries, forced collision retries, persistence, partial-tail recovery and corrupt-record refusal.
+- 60 Java tests, 17 React component tests and 3 headless browser integration tests: passed. Frontend production build: passed. Includes genuine local HTTP requests, 24 concurrent alias creations (one winner), 100 concurrent visits (no lost updates), deterministic expiry boundaries, forced collision retries, persistence, partial-tail recovery and corrupt-record refusal.
 - Java has no external libraries. React/Vite and test dependencies are pinned in `frontend/package-lock.json`; use `npm ci` for repeatable installs. This does **not** replace JDK/container patching or a security review.
 - GitHub Actions runs the same suite on Java 17. Workflow execution must be checked after repository publication; local success is not evidence of a remote CI run.
 - No production load test, automated vulnerability scan, Windows execution or disk/power-loss fault campaign is claimed. Concurrency tests verify correctness, not a throughput SLO.
@@ -77,4 +77,8 @@ This is not a general-purpose transactional database: no checksums for detecting
 4. Add real readiness, structured metrics/traces and alerts. Run load, disk failure, shutdown and recovery tests.
 5. Cache redirect lookups if measured traffic needs it. Consider durable async analytics with documented eventual consistency and duplicate-handling semantics.
 
-The subsequent [feature tracker](FeatureTracker.md) documents the React separation, deactivation and expiry extension with their impact analysis, implementation and validation. The full ambiguous scenario remains separate assignment work; this does not claim to deliver all three scenarios.
+The subsequent [feature tracker](FeatureTracker.md) documents link listing, the React separation, deactivation and expiry extension with their impact analysis, implementation and validation. The full ambiguous scenario remains separate assignment work; this does not claim to deliver all three scenarios.
+
+## Listing saved links
+
+`GET /api/links` reads an immutable snapshot under the existing store lock and returns complete metadata, newest first, with code-ascending ties. Listing and row selection are reads, so they do not affect click counts or journal contents. React loads the table on explicit refresh and fetches current metadata when a row is selected. The snapshot includes disabled and expired links. This local prototype has no list pagination, filters or ownership checks; sorting holds the store lock and response size grows with the inventory. A public service needs authorization and bounded pagination.

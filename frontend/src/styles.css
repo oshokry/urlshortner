@@ -48,3 +48,9 @@ main{padding:24px 18px}
 .row{grid-template-columns:1fr}
 }
 
+.saved-links{margin-top:22px}
+.links-table{overflow-x:auto;margin-top:18px}
+.links-table table{width:100%;border-collapse:collapse;font-size:13px;table-layout:fixed;min-width:640px}
+.links-table th,.links-table td{text-align:left;padding:12px 8px;border-bottom:1px solid #dce5df;overflow-wrap:anywhere;vertical-align:top}
+.links-table th:nth-child(2){width:30%}
+.links-table button{max-width:100%;white-space:normal;overflow-wrap:anywhere}

@@ -4,9 +4,44 @@ Keep this file as the running history of feature additions. Keep the most recent
 
 | ID | Feature | Type | Implementation status |
 |---|---|---|---|
+| F004 | List saved links | Brownfield enhancement | Implemented; 80 tests passed locally |
 | F003 | Separate React frontend | Architecture refactor | Implemented; 65 tests passed locally |
 | F002 | Extend expiry | Brownfield enhancement | Implemented; 52 tests passed locally |
 | F001 | Disable a short link | Brownfield enhancement | Implemented; 39 tests passed locally |
+
+## F004 — List saved links
+
+**Added:** 2026-10-21  
+**Request:** Implement scenario 3, List links, with Java backend and React UI. Preserve the small-change budget and keep this tracker newest first.  
+**UI:** **Saved links** table with **Refresh links**. Displays code, destination, clicks, expiry and status. Selecting a code fetches fresh metadata into the analytics panel above, including when reselecting the same code.  
+**API:** `GET /api/links` returns an array of existing Link metadata objects; HTTP 200 and `[]` for an empty store.  
+**Status:** Implemented and locally validated. See Git history for publication details.
+
+### Behavior and design
+
+- Return every saved link, including active, expired, disabled and never-expiring entries. Sort by creation timestamp descending, then code ascending for deterministic ties.
+- Take an immutable snapshot under the store lock. Reads do not append journal events or increment click counts. Existing data and API operations retain their behavior; no journal migration is needed.
+- Load the table on demand. Refresh explicitly after creates, redirects, expiry changes or disable operations; there is no polling. Clear old rows during refresh, show loading/empty/error states and allow retry. Selection errors preserve the table and current analytics. Pending list requests disable duplicate actions.
+- Reuse the existing metadata serializer and form/API client. GET listing bypasses the creation rate limiter; unsupported collection methods advertise `Allow: GET, POST`.
+- This prototype returns the entire inventory without filtering, pagination or authentication. Sorting holds the store lock and costs O(n log n); response size grows with saved links. Add owner checks and bounded pagination before a large or public deployment.
+
+### Affected components and verification
+
+| Component | Change | Verification |
+|---|---|---|
+| `LinkStore`, `JournalLinkStore`, `ShortenerService` | Immutable, ordered list snapshot | Empty state, deterministic ordering, all states, no side effects, concurrent writes, replay |
+| `ShortenerServer`, OpenAPI | GET collection response using existing Link JSON | HTTP shape/order/headers, empty array, method contract, creation limiter independence |
+| React `LinkList`, `App`, API client and CSS | Responsive table, refresh and fresh selection into analytics | React interaction/error tests; live browser flow and mobile width |
+
+### Validation and size
+
+**70 changed production-code lines: 66 added + 4 removed across eight Java/React/CSS files. Including 12 OpenAPI lines, the total is 82.** Tests and prose documentation are excluded. Java compilation treats warnings as errors. **60 Java tests, 17 React tests and 3 headless browser integration tests pass (80 total)**; frontend production build passes. The new browser scenario verifies listing, fresh selection, disable, refresh, page reload, retained counts and mobile overflow.
+
+The browser tests use the real Java server through the built frontend proxy. Test journals now have unique names for repeatable runs. Local execution is Linux; Windows execution and remote CI success are not implied. Historical entries below retain their original validation counts.
+
+### Demo
+
+Create a link → **Refresh links** → select its code → extend or disable it → **Refresh links** again. Reload the page and load the list again. Restart Java and repeat to verify the journal-backed inventory remains available.
 
 ## F003 — Separate React frontend
 

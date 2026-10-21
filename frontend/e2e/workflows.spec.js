@@ -14,7 +14,7 @@ test('React production build creates, redirects, extends and disables through Ja
   const redirect = await request.get('/r/react-demo', { maxRedirects: 0 });
   expect(redirect.status()).toBe(302);
   expect(redirect.headers().location).toBe('https://example.com/react-demo');
-  await page.getByRole('button', { name: 'Refresh' }).click();
+  await page.getByRole('button', { name: 'Refresh', exact: true }).click();
   await expect(page.getByText('1', { exact: true })).toBeVisible();
   await page.getByLabel('Extend expiry by').selectOption('3600');
   await page.getByRole('button', { name: 'Extend expiry' }).click();
@@ -30,7 +30,7 @@ test('React production build creates, redirects, extends and disables through Ja
   expect((await request.get('/r/react-demo', { maxRedirects: 0 })).status()).toBe(410);
   await page.reload();
   await page.getByLabel('Short code').fill('react-demo');
-  await page.getByRole('button', { name: 'Refresh' }).click();
+  await page.getByRole('button', { name: 'Refresh', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Link disabled' })).toBeDisabled();
   await expect(page.getByText('1', { exact: true })).toBeVisible();
   await page.setViewportSize({ width: 390, height: 844 });
@@ -51,4 +51,32 @@ test('non-expiring links cannot be extended and alias conflicts are visible', as
   await expect(page.locator('#message.error')).toBeVisible();
   await page.getByLabel('Short code').fill('missing-demo');
   await expect(page.getByRole('button', { name: 'Look up a link to disable it' })).toBeDisabled();
+});
+
+test('list shows saved links and loads fresh analytics after edits and page reload', async ({ page, request }) => {
+  await request.post('/api/links', { form: { url: 'https://example.com/list', alias: 'list-demo', ttlSeconds: '3600' } });
+  await request.get('/r/list-demo', { maxRedirects: 0 });
+  await page.goto('/');
+  const list = page.getByRole('region', { name: 'Saved links', exact: true });
+  await list.getByRole('button', { name: 'Refresh links' }).click();
+  const row = list.getByRole('row').filter({ has: page.getByRole('button', { name: 'Inspect list-demo', exact: true }) });
+  await expect(row.getByText('Active', { exact: true })).toBeVisible();
+  await expect(row.getByText('1', { exact: true })).toBeVisible();
+  await row.getByRole('button').click();
+  await expect(page.getByLabel('Short code')).toHaveValue('list-demo');
+  page.once('dialog', dialog => dialog.accept());
+  await page.getByRole('button', { name: 'Disable list-demo', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Link disabled' })).toBeDisabled();
+  await list.getByRole('button', { name: 'Refresh links' }).click();
+  await expect(row.getByText('Disabled', { exact: true })).toBeVisible();
+  await page.reload();
+  await list.getByRole('button', { name: 'Refresh links' }).click();
+  await expect(row.getByText('Disabled', { exact: true })).toBeVisible();
+  await expect(row.getByText('1', { exact: true })).toBeVisible();
+  await row.getByRole('button').click();
+  await expect(page.getByRole('button', { name: 'Link disabled' })).toBeDisabled();
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  const after = await (await request.get('/api/links/list-demo')).json();
+  expect(after.clicks).toBe(1);
 });

@@ -44,6 +44,7 @@ public final class ShortenerService {
         }
         throw new ApiException(503, "Could not allocate a short code; retry later");
     }
+    public java.util.List<Link> list() { return store.list(); }
     public Link stats(String code) {
         if (!validCode(code)) throw new ApiException(404, "Short link not found");
         Link link = store.find(code);

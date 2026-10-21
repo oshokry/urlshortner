@@ -1,6 +1,6 @@
 # Shortly — Java + React URL shortener
 
-A runnable URL shortener with a **Java 17 backend** and a **React frontend**. Create links, inspect persistent click analytics, extend expiry, and disable links through the browser or API. Java uses only the standard library; React uses npm and Vite. No Maven, database installation or API keys are required. The first frontend install requires network access.
+A runnable URL shortener with a **Java 17 backend** and a **React frontend**. Create and list links, inspect persistent click analytics, extend expiry, and disable links through the browser or API. Java uses only the standard library; React uses npm and Vite. No Maven, database installation or API keys are required. The first frontend install requires network access.
 
 ## Start here — Windows
 
@@ -54,6 +54,19 @@ Browser integration tests use a separate journal under `build/`, backend port 18
 
 Start with [the interview walkthrough](docs/INTERVIEW.md) for the explanation and likely questions.
 
+## List saved links
+
+1. Open **http://localhost:5173** and scroll to **Saved links**.
+2. Click **Refresh links** to load all saved links, newest first. The table shows each code, destination, click count, expiry and status. Active, expired, disabled and non-expiring links are included.
+3. Click a code to fetch its current metadata into **Link analytics** above. You can then extend expiry or disable it using the existing controls.
+4. Click **Refresh links** after creating, opening or modifying links to update the table. Reading the list or selecting a code does not count as a redirect.
+
+```powershell
+curl.exe http://localhost:8080/api/links
+```
+
+The API returns a JSON array using the same link fields as individual metadata; an empty store returns `[]`. Equal creation timestamps sort by code ascending. This small local demo returns all links without pagination or filtering. The endpoint exposes the full link inventory without authentication; add ownership and pagination before public deployment.
+
 ## Extend expiry in the UI
 
 1. Create a link with a lifetime, or look up its code in **Link analytics** and click **Refresh**.
@@ -89,11 +102,13 @@ Track this and future additions in [docs/FeatureTracker.md](docs/FeatureTracker.
 - Browser UI, API/schema contract, regression tests, and GitHub Actions workflow.
 - Brownfield enhancement: disable a link from the UI or API; retain analytics and persist the disabled state.
 - Extend an existing link's expiry from the UI or API; renew expired links without changing the short URL.
+- List saved links, newest first, and select a code to inspect its current analytics.
 
 ## API
 
 | Method | Endpoint | Behavior |
 |---|---|---|
+| GET | `/api/links` | List all saved links newest first, including expired and disabled links |
 | POST | `/api/links` | Create; form-encoded body; returns 201 and JSON |
 | GET | `/r/{code}` | Count and redirect, 302; 404 unknown; 410 expired or disabled |
 | HEAD | `/r/{code}` | Resolve without counting |
@@ -165,6 +180,7 @@ flowchart TD
 | `frontend/src/App.jsx` | React layout and create-to-analytics handoff |
 | `frontend/src/CreateLink.jsx` | Creation form and copy link |
 | `frontend/src/LinkAnalytics.jsx` | Lookup, analytics, expiry extension and disable |
+| `frontend/src/LinkList.jsx` | Saved-link table, refresh and selection into analytics |
 | `frontend/src/api.js` | Form-encoded API requests and error handling |
 | `frontend/src/styles.css` | Frontend styling |
 | `frontend/vite.config.js` | React build, local proxy and test configuration |
@@ -175,10 +191,10 @@ flowchart TD
 - [API contract](docs/openapi.yaml)
 - [Feature tracker: implementation history, demos and validation](docs/FeatureTracker.md)
 
-**Validation:** 52 Java tests, 11 React component tests and 2 headless browser integration tests pass locally; the frontend production build succeeds. The backend route test now verifies that Java serves no UI assets. Coverage includes HTTP behavior, persistence, concurrency, validation and write failures. Compilation treats warnings as errors. CI runs Java tests, React tests and frontend builds on Linux and Windows, plus browser integration tests on Linux. Remote results must be verified after publishing.
+**Validation:** 60 Java tests, 17 React component tests and 3 headless browser integration tests pass locally; the frontend production build succeeds. The backend route test now verifies that Java serves no UI assets. Coverage includes HTTP behavior, persistence, concurrency, validation and write failures. Compilation treats warnings as errors. CI runs Java tests, React tests and frontend builds on Linux and Windows, plus browser integration tests on Linux. Remote results must be verified after publishing.
 
 ## Scope and limitations
 
-This submission implements the **greenfield portion and small brownfield enhancements**, not the assignment's full three-scenario exercise. It demonstrates production-minded choices in a small prototype; it is **not ready for public production deployment**. No authentication, owner-level authorization, abuse screening, distributed storage, TLS termination, journal compaction or data-erasure/retention policy is included. Anyone with a code can read its analytics, extend its expiry or disable it. Bind locally for the demo. Deactivation retains data and is permanent through the API.
+This submission implements the **greenfield portion and small brownfield enhancements**, not the assignment's full three-scenario exercise. It demonstrates production-minded choices in a small prototype; it is **not ready for public production deployment**. No authentication, owner-level authorization, abuse screening, distributed storage, TLS termination, journal compaction or data-erasure/retention policy is included. Anyone who can reach the API can list all links and their analytics, extend expiry or disable links. Bind locally for the demo. Deactivation retains data and is permanent through the API.
 
 The journal serializes and syncs every write; this trades throughput for a clear durability model. Total redirects are not unique visitors and do not prove the destination page loaded. A crash after commit but before HTTP delivery can leave a committed operation without a received response. Health is liveness only, not disk readiness. Review [the documented next steps](docs/ENGINEERING.md) before treating this as a production design.

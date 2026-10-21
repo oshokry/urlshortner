@@ -8,12 +8,12 @@ Only claim personal review for code and decisions you have actually reviewed.
 
 ## Show it (two minutes)
 
-1. Run `scripts/test.ps1` on Windows or `bash scripts/test.sh` on macOS/Linux. Show **52 passing Java tests**, then run `npm --prefix frontend test` for the React component tests.
+1. Run `scripts/test.ps1` on Windows or `bash scripts/test.sh` on macOS/Linux. Show **60 passing Java tests**, then run `npm --prefix frontend test` for the React component tests.
 2. Start Java with `scripts/run.ps1` and React in a second terminal with `scripts/frontend.ps1` (use the `.sh` equivalents on macOS/Linux). Open `http://localhost:5173`.
 3. Create `https://example.com` with alias `interview` and no expiry.
 4. Open the generated link. Return and refresh analytics. Explain “redirect requests, not unique visitors.”
 5. Try the alias again; show the conflict rather than overwriting a destination.
-6. Stop/restart and look up the code to prove persistence.
+6. Scroll to **Saved links**, click **Refresh links**, and select a code to load its analytics without typing it. Stop/restart Java and refresh the list to prove persistence.
 
 If a code already exists from rehearsal, reuse its analytics or choose a fresh alias.
 
