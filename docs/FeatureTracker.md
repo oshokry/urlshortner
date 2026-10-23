@@ -4,12 +4,37 @@ Keep this file as the running history of feature additions. Keep the most recent
 
 | ID | Feature | Type | Implementation status |
 |---|---|---|---|
+| F007 | Enable a disabled link | Brownfield enhancement | Implemented; 86 tests and production build passed on Windows |
 | F006 | Visit saved links | Frontend enhancement | Implemented; build and browser check passed |
 | F005 | Saved links beside analytics | Frontend layout | Implemented; desktop/mobile layout checks passed |
 | F004 | List saved links | Brownfield enhancement | Implemented; 80 tests passed locally |
 | F003 | Separate React frontend | Architecture refactor | Implemented; 65 tests passed locally |
 | F002 | Extend expiry | Brownfield enhancement | Implemented; 52 tests passed locally |
 | F001 | Disable a short link | Brownfield enhancement | Implemented; 39 tests passed locally |
+
+## F007 — Enable a disabled link
+
+**Added:** 2026-10-21
+
+**Request:** Add support to enable a disabled link.
+
+**Status:** Implemented. This supersedes earlier entries describing disabling as permanent.
+
+### Behavior and implementation
+
+- Link analytics shows **Enable <code>** for a loaded disabled link. Enabling preserves the short URL, destination, creation time, expiry and click history. Refresh Saved links to update its snapshot.
+- An expired link remains expired after enabling; expiry can then be extended using the existing control. Non-expiring links resume redirects immediately.
+- `PATCH /api/links/{code}` accepts exactly one form field: `disabled=false` to enable, or the existing `ttlSeconds` to extend. Enable returns 200 with current metadata, including when already enabled; unknown/malformed codes return 404. Invalid or combined fields return 400. Existing body limits, media-type checks and storage-error responses apply.
+- The immutable model, store interface, synchronized journal implementation, service, HTTP adapter, React API client and analytics panel support reactivation. The store forces an `A<TAB>code<LF>` event to disk before publishing; repeated enables append nothing. Enable, disable and visit share the existing lock.
+- UI actions lock during requests. An uncertain result requires explicit Refresh before another mutation; editing the lookup code clears the loaded action. Disable confirmation and help text now describe reversible deactivation.
+
+### Validation and limitations
+
+**64 Java tests, 19 React component tests and 3 headless Chromium integration tests pass on Windows (86 total); frontend production build passes.** New coverage checks metadata retention, GET/HEAD behavior, idempotency without extra journal events, enable/visit/disable replay, expired-link renewal, invalid forms, failed writes, orphan-event refusal, pending controls and uncertain requests. The browser workflow verifies disabling, enabling, restored redirects, retained counts, page reload and mobile overflow through the real Java API. Playwright Chromium was installed for this verification.
+
+Existing C/V/D/E journals remain readable. Older binaries cannot replay the new A events: roll forward after enabling links. This local demo retains its existing lack of authentication and ownership checks.
+
+All three browser tests reported `ok`; the Windows runner stalled during server teardown and was interrupted afterward. The test-server ports were checked after interruption.
 
 ## F006 — Visit saved links
 

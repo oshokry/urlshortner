@@ -71,7 +71,7 @@ describe('React shortener workflows', () => {
     await user.click(screen.getByRole('button', { name: 'Refresh' }));
     await waitFor(() => expect(screen.getByRole('button', { name: 'Extend expiry' })).toBeEnabled());
   });
-  it('confirms permanent disable and retains analytics; cancel sends nothing', async () => {
+  it('confirms disable and retains analytics; cancel sends nothing', async () => {
     const { user, fetch } = setup(); await lookup(user, fetch);
     const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
     await user.click(screen.getByRole('button', { name: 'Disable demo' }));
@@ -83,6 +83,34 @@ describe('React shortener workflows', () => {
     expect(screen.getByRole('button', { name: 'Link disabled' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Extend expiry' })).toBeDisabled();
     expect(fetch.mock.calls[1]).toEqual(['/api/links/demo', { method: 'DELETE' }]);
+  });
+  it('enables a disabled link with retained analytics and expiry', async () => {
+    const { user, fetch } = setup(); await lookup(user, fetch, { ...sample, disabled: true, expired: true });
+    fetch.mockResolvedValueOnce(reply({ ...sample, expired: true }));
+    await user.click(screen.getByRole('button', { name: 'Enable demo' }));
+    expect(await screen.findByText('Enabled. Extend expiry to restore redirects.')).toBeVisible();
+    expect(screen.getByText('Expired')).toBeVisible();
+    expect(screen.getByText('3')).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Extend expiry' })).toBeEnabled();
+    const [path, options] = fetch.mock.calls[1];
+    expect(path).toBe('/api/links/demo'); expect(options.method).toBe('PATCH');
+    expect(Object.fromEntries(options.body)).toEqual({ disabled: 'false' });
+  });
+  it('locks enable while pending and requires refresh after failure', async () => {
+    const { user, fetch } = setup(); await lookup(user, fetch, { ...sample, disabled: true });
+    let reject;
+    fetch.mockReturnValueOnce(new Promise((_, fail) => { reject = fail; }));
+    await user.click(screen.getByRole('button', { name: 'Enable demo' }));
+    expect(screen.getByRole('button', { name: 'Enable demo' })).toBeDisabled();
+    expect(screen.getByLabelText('Short code')).toBeDisabled();
+    reject(new Error('Network lost'));
+    expect(await screen.findByText(/Refresh to check the link before retrying/)).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Enable demo' })).toBeDisabled();
+    fetch.mockResolvedValueOnce(reply({ ...sample, disabled: true }));
+    await user.click(screen.getByRole('button', { name: 'Refresh' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Enable demo' })).toBeEnabled());
+    await user.type(screen.getByLabelText('Short code'), 'other');
+    expect(screen.queryByRole('button', { name: 'Enable demo' })).not.toBeInTheDocument();
   });
   it.each([
     ['never-expiring', { expiresAt: null }], ['disabled', { disabled: true }],

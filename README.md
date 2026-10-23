@@ -80,6 +80,18 @@ Active links gain time from their existing expiry. Expired links are renewed fro
 curl.exe -i -X PATCH http://localhost:8080/api/links/my-demo --data-urlencode "ttlSeconds=3600"
 ```
 
+## Enable a disabled link
+
+Look up a disabled code in **Link analytics**, then click **Enable <code>**. The updated status appears immediately. The destination, short URL, expiry and click history are preserved, including after restart. Refresh Saved links to update its status there.
+
+An expired link remains **Expired** after enabling; use **Extend expiry** to restore redirects. Repeating an enable request is safe and does not add clicks or extend expiry. After a network error, refresh analytics before retrying.
+
+```powershell
+curl.exe -i -X PATCH http://localhost:8080/api/links/my-demo --data-urlencode "disabled=false"
+```
+
+The API returns 200 with current metadata, including for already enabled links; unknown codes return 404. Send exactly one field: `disabled=false` to enable, or `ttlSeconds` to extend expiry.
+
 ## Disable a link in the UI
 
 1. Create a link, or enter its short code in **Link analytics** and click **Refresh**.
@@ -87,7 +99,7 @@ curl.exe -i -X PATCH http://localhost:8080/api/links/my-demo --data-urlencode "t
 3. The status changes to **Disabled**, the button becomes **Link disabled**, and the click history stays visible.
 4. Opening the short link now returns **410 Gone**. Restarting the app preserves the disabled state.
 
-Disabling is permanent through this API. Editing the lookup code disables the action button until you refresh, so the action targets the link whose analytics are displayed. No terminal commands are needed for this feature.
+Disabled links can be enabled again from Link analytics. Editing the lookup code disables the action button until you refresh, so the action targets the link whose analytics are displayed. No terminal commands are needed for this feature.
 
 Track this and future additions in [docs/FeatureTracker.md](docs/FeatureTracker.md).
 
@@ -104,6 +116,7 @@ Track this and future additions in [docs/FeatureTracker.md](docs/FeatureTracker.
 - Brownfield enhancement: disable a link from the UI or API; retain analytics and persist the disabled state.
 - Extend an existing link's expiry from the UI or API; renew expired links without changing the short URL.
 - List saved links, newest first, and select a code to inspect its current analytics.
+- Enable disabled links from the UI or API, retaining expiry and analytics across restarts.
 
 ## API
 
@@ -114,8 +127,8 @@ Track this and future additions in [docs/FeatureTracker.md](docs/FeatureTracker.
 | GET | `/r/{code}` | Count and redirect, 302; 404 unknown; 410 expired or disabled |
 | HEAD | `/r/{code}` | Resolve without counting |
 | GET | `/api/links/{code}` | Metadata and analytics as JSON, including expired and disabled links |
-| DELETE | `/api/links/{code}` | Permanently disable; 204 even if already disabled; 404 if unknown |
-| PATCH | `/api/links/{code}` | Extend expiry using form field `ttlSeconds`; 200 with updated metadata; 409 never expires; 410 disabled |
+| DELETE | `/api/links/{code}` | Disable; 204 even if already disabled; 404 if unknown |
+| PATCH | `/api/links/{code}` | Enable with `disabled=false`, or extend expiry with `ttlSeconds`; 200 with updated metadata; extension: 409 never expires, 410 disabled |
 | GET | `/health` | Process liveness; 200 `{"status":"up"}` |
 
 
@@ -192,10 +205,10 @@ flowchart TD
 - [API contract](docs/openapi.yaml)
 - [Feature tracker: implementation history, demos and validation](docs/FeatureTracker.md)
 
-**Validation:** 60 Java tests, 17 React component tests and 3 headless browser integration tests pass locally; the frontend production build succeeds. The backend route test now verifies that Java serves no UI assets. Coverage includes HTTP behavior, persistence, concurrency, validation and write failures. Compilation treats warnings as errors. CI runs Java tests, React tests and frontend builds on Linux and Windows, plus browser integration tests on Linux. Remote results must be verified after publishing.
+**Validation:** 64 Java tests, 19 React component tests and 3 headless Chromium integration tests pass on Windows; the frontend production build succeeds. Browser coverage includes enabling a link and reloading the page. The backend route test now verifies that Java serves no UI assets. Coverage includes HTTP behavior, persistence, concurrency, validation and write failures. Compilation treats warnings as errors. CI runs Java tests, React tests and frontend builds on Linux and Windows, plus browser integration tests on Linux. Remote results must be verified after publishing.
 
 ## Scope and limitations
 
-This submission implements the **greenfield portion and small brownfield enhancements**, not the assignment's full three-scenario exercise. It demonstrates production-minded choices in a small prototype; it is **not ready for public production deployment**. No authentication, owner-level authorization, abuse screening, distributed storage, TLS termination, journal compaction or data-erasure/retention policy is included. Anyone who can reach the API can list all links and their analytics, extend expiry or disable links. Bind locally for the demo. Deactivation retains data and is permanent through the API.
+This submission implements the **greenfield portion and small brownfield enhancements**, not the assignment's full three-scenario exercise. It demonstrates production-minded choices in a small prototype; it is **not ready for public production deployment**. No authentication, owner-level authorization, abuse screening, distributed storage, TLS termination, journal compaction or data-erasure/retention policy is included. Anyone who can reach the API can list all links and their analytics, extend expiry, disable or enable links. Bind locally for the demo. Deactivation retains data and can be reversed by enabling the link.
 
 The journal serializes and syncs every write; this trades throughput for a clear durability model. Total redirects are not unique visitors and do not prove the destination page loaded. A crash after commit but before HTTP delivery can leave a committed operation without a received response. Health is liveness only, not disk readiness. Review [the documented next steps](docs/ENGINEERING.md) before treating this as a production design.

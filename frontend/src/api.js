@@ -14,4 +14,5 @@ export const api = {
   stats: code => request(linkPath(code)),
   extend: (code, ttlSeconds) => request(linkPath(code), { method: 'PATCH', body: new URLSearchParams({ ttlSeconds }) }),
   disable: code => request(linkPath(code), { method: 'DELETE' }),
+  enable: code => request(linkPath(code), { method: 'PATCH', body: new URLSearchParams({ disabled: 'false' }) }),
 };

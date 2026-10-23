@@ -48,6 +48,51 @@ public final class ShortenerTests {
         }
     }
     private static void runSuite(Path dir) throws Exception {
+        test("enable preserves metadata, is idempotent and survives replay", () -> {
+            Path file = dir.resolve("enable.journal");
+            Link original;
+            try (JournalLinkStore store = new JournalLinkStore(file)) {
+                var service = new ShortenerService(store, CLOCK);
+                service.create("https://example.com", "enable-demo", "60");
+                original = service.resolve("enable-demo");
+                service.disable("enable-demo");
+                check(service.enable("enable-demo").equals(original), "Only disabled flag changes");
+                long size = Files.size(file);
+                check(service.enable("enable-demo").equals(original) && Files.size(file) == size, "No duplicate event");
+                check(service.resolve("enable-demo").clicks() == 2, "Redirect restored");
+                error(404, () -> service.enable("missing"));
+                error(404, () -> service.enable("../bad"));
+                error(404, () -> service.enable(null));
+            }
+            try (JournalLinkStore store = new JournalLinkStore(file)) {
+                check(!store.find("enable-demo").disabled() && store.find("enable-demo").clicks() == 2, "Replay enable and later visit");
+                store.disable("enable-demo");
+                var later = new ShortenerService(store, Clock.fixed(NOW.plusSeconds(60), ZoneOffset.UTC));
+                check(later.enable("enable-demo").expired(NOW.plusSeconds(60)), "Expiry preserved");
+                error(410, () -> later.resolve("enable-demo"));
+                later.extend("enable-demo", "60");
+                check(later.resolve("enable-demo").clicks() == 3, "Enabled expired link can be renewed");
+                store.disable("enable-demo");
+            }
+            try (JournalLinkStore store = new JournalLinkStore(file)) {
+                check(store.find("enable-demo").disabled(), "Later disable survives replay");
+            }
+        });
+        test("failed enable write retains disabled state", () -> {
+            JournalLinkStore store = new JournalLinkStore(dir.resolve("enable-failure.journal"));
+            var service = new ShortenerService(store, CLOCK);
+            service.create("https://example.com", "failure", null);
+            service.disable("failure");
+            store.close();
+            try { service.enable("failure"); throw new AssertionError("Acknowledged failed enable"); }
+            catch (IOException expected) { check(service.stats("failure").disabled(), "Failed append preserves state"); }
+        });
+        test("orphan enable event fails startup", () -> {
+            Path file = dir.resolve("orphan-enable.journal");
+            Files.writeString(file, "A\tmissing\n");
+            try (JournalLinkStore store = new JournalLinkStore(file)) { store.find("missing"); throw new AssertionError("Accepted orphan"); }
+            catch (IOException expected) { check(expected.getMessage().contains("Invalid journal"), "Fail closed"); }
+        });
         Path journal = dir.resolve("links.journal");
         try (JournalLinkStore store = new JournalLinkStore(journal)) {
             ShortenerService service = new ShortenerService(store, CLOCK);
@@ -146,6 +191,7 @@ public final class ShortenerTests {
                 public List<Link> list() { return List.of(); }
                 public Link visit(String code, Instant now) throws IOException { throw new IOException("disk full"); }
                 public void disable(String code) throws IOException { throw new IOException("disk full"); }
+                public Link enable(String code) throws IOException { throw new IOException("disk full"); }
                 public Link extend(String code, long seconds, Instant now) throws IOException { throw new IOException("disk full"); }
                 public void close() { }
             };
@@ -451,6 +497,7 @@ public final class ShortenerTests {
                 check(post(client, base, "url=javascript%3Aalert%281%29", "application/x-www-form-urlencoded").statusCode() == 400, "Invalid URL");
             });
             test("HTTP creation rate limiter returns 429", () -> {
+                check(post(client, base, "url=https%3A%2F%2Fexample.com&disabled=false", "application/x-www-form-urlencoded").statusCode() == 400, "Create still rejects disabled field");
                 boolean limited = false;
                 for (int i = 0; i < 40; i++) {
                     var response = post(client, base, "url=https%3A%2F%2Fexample.com", "application/x-www-form-urlencoded");
@@ -509,6 +556,17 @@ public final class ShortenerTests {
             test("HTTP PATCH enforces media type and body limit", () -> {
                 check(patch(client, base, "patch-demo", "{}", "application/json").statusCode() == 415, "Media type");
                 check(patch(client, base, "patch-demo", "ttlSeconds=" + "1".repeat(8192), "application/x-www-form-urlencoded").statusCode() == 413, "Body limit");
+            });
+            test("HTTP enable restores redirects and validates forms", () -> {
+                var response = patch(client, base, "webdemo", "disabled=false", "application/x-www-form-urlencoded");
+                check(response.statusCode() == 200 && response.body().contains("\"disabled\":false"), "Enabled metadata");
+                check(method(client, base + "/r/webdemo", "HEAD").statusCode() == 302, "HEAD restored");
+                check(store.find("webdemo").clicks() == 1, "Enable and HEAD do not count");
+                check(get(client, base + "/r/webdemo").statusCode() == 302, "GET restored");
+                check(patch(client, base, "webdemo", "disabled=false", "application/x-www-form-urlencoded").statusCode() == 200, "Idempotent");
+                check(patch(client, base, "nope", "disabled=false", "application/x-www-form-urlencoded").statusCode() == 404, "Unknown code");
+                for (String body : List.of("disabled=true", "disabled=FALSE", "disabled=", "disabled=false&ttlSeconds=60", "disabled=false&disabled=false"))
+                    check(patch(client, base, "webdemo", body, "application/x-www-form-urlencoded").statusCode() == 400, "Invalid enable form");
             });
         }
     }

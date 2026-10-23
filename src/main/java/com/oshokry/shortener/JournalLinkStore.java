@@ -74,6 +74,10 @@ public final class JournalLinkStore implements LinkStore {
                 Link link = links.get(fields[1]);
                 if (link == null) throw new IllegalArgumentException("disable without link");
                 links.put(link.code(), link.disable());
+            } else if (fields.length == 2 && fields[0].equals("A")) {
+                Link link = links.get(fields[1]);
+                if (link == null) throw new IllegalArgumentException("enable without link");
+                links.put(link.code(), link.enable());
             } else if (fields.length == 3 && fields[0].equals("E")) {
                 Link link = links.get(fields[1]);
                 Instant expiry = Instant.parse(fields[2]);
@@ -118,6 +122,16 @@ public final class JournalLinkStore implements LinkStore {
         if (link.disabled()) return;
         append("D\t" + code);
         links.put(code, link.disable());
+    }
+
+    @Override public synchronized Link enable(String code) throws IOException {
+        Link link = links.get(code);
+        if (link == null) throw new ApiException(404, "Short link not found");
+        if (!link.disabled()) return link;
+        Link updated = link.enable();
+        append("A\t" + code);
+        links.put(code, updated);
+        return updated;
     }
 
     @Override public synchronized Link visit(String code, Instant now) throws IOException {

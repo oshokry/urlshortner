@@ -60,6 +60,10 @@ public final class ShortenerService {
         if (!validCode(code)) throw new ApiException(404, "Short link not found");
         store.disable(code);
     }
+    public Link enable(String code) throws IOException {
+        if (!validCode(code)) throw new ApiException(404, "Short link not found");
+        return store.enable(code);
+    }
     public Link extend(String code, String ttlSeconds) throws IOException {
         if (!validCode(code)) throw new ApiException(404, "Short link not found");
         try {

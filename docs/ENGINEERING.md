@@ -1,5 +1,13 @@
 # Greenfield engineering summary
 
+## Enabling disabled links (F007)
+
+`PATCH /api/links/{code}` with form field `disabled=false` idempotently enables an existing link and returns its metadata. The same endpoint retains expiry extension via `ttlSeconds`; exactly one field is accepted. Enabling changes only the disabled flag, so expired links still require an extension. The React analytics panel offers Enable for disabled links, locks pending operations and requires Refresh after uncertain mutations.
+
+The synchronized store forces `A<TAB>code<LF>` before publishing the enabled snapshot. Replay applies this event alongside existing C/V/D/E records; unknown enable targets fail startup. Repeated enables produce no extra records. Older binaries cannot read A events; roll forward rather than downgrade a journal containing them. Earlier historical descriptions of permanent deactivation are superseded by F007.
+
+Windows verification for F007: 64 Java tests, 19 React component tests and 3 headless Chromium integration tests pass; frontend production build passes. Includes restart persistence, idempotency, retained analytics/expiry, failed-write behavior and HTTP/UI checks. Browser verification is recorded in the feature tracker.
+
 ## Normalized requirements and assumptions
 
 The supplied brief asks for a URL shortener with APIs, analytics, reliability and an AI-assisted engineering process. The current request narrows implementation to the greenfield scenario under interview time pressure. The brief does not specify traffic, persistence technology, alias ownership, link lifetime or the analytics definition.

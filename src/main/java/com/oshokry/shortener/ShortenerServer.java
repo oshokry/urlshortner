@@ -70,6 +70,7 @@ public final class ShortenerServer implements AutoCloseable {
                 byte[] bytes = exchange.getRequestBody().readNBytes(8193);
                 if (bytes.length > 8192) throw new ApiException(413, "Request body exceeds 8192 bytes");
                 Map<String, String> form = parseForm(new String(bytes, StandardCharsets.UTF_8));
+                if (form.containsKey("disabled")) throw new ApiException(400, "Unknown field");
                 Link link = service.create(form.get("url"), form.get("alias"), form.get("ttlSeconds"));
                 status = 201;
                 headers.set("Location", "/api/links/" + link.code());
@@ -88,8 +89,9 @@ public final class ShortenerServer implements AutoCloseable {
                     byte[] bytes = exchange.getRequestBody().readNBytes(8193);
                     if (bytes.length > 8192) throw new ApiException(413, "Request body exceeds 8192 bytes");
                     Map<String, String> form = parseForm(new String(bytes, StandardCharsets.UTF_8));
-                    if (form.size() != 1 || !form.containsKey("ttlSeconds")) throw new ApiException(400, "Provide only ttlSeconds");
-                    Link updated = service.extend(code, form.get("ttlSeconds"));
+                    if (form.size() != 1 || !(form.containsKey("ttlSeconds") || "false".equals(form.get("disabled"))))
+                        throw new ApiException(400, "Provide only ttlSeconds or disabled=false");
+                    Link updated = form.containsKey("disabled") ? service.enable(code) : service.extend(code, form.get("ttlSeconds"));
                     status = 200;
                     send(exchange, status, "application/json", json(updated));
                 } else {
@@ -143,7 +145,7 @@ public final class ShortenerServer implements AutoCloseable {
                 String[] fields = pair.split("=", 2);
                 String key = URLDecoder.decode(fields[0], StandardCharsets.UTF_8);
                 String value = fields.length == 2 ? URLDecoder.decode(fields[1], StandardCharsets.UTF_8) : "";
-                if (!Set.of("url", "alias", "ttlSeconds").contains(key)) throw new ApiException(400, "Unknown field");
+                if (!Set.of("url", "alias", "ttlSeconds", "disabled").contains(key)) throw new ApiException(400, "Unknown field");
                 if (result.putIfAbsent(key, value) != null) throw new ApiException(400, "Duplicate field");
             }
             return result;

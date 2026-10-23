@@ -34,6 +34,14 @@ test('React production build creates, redirects, extends and disables through Ja
   await expect(page.getByRole('button', { name: 'Link disabled' })).toBeDisabled();
   await expect(page.getByText('1', { exact: true })).toBeVisible();
   await page.setViewportSize({ width: 390, height: 844 });
+  await page.getByRole('button', { name: 'Enable react-demo', exact: true }).click();
+  await expect(page.getByText('Active', { exact: true })).toBeVisible();
+  expect((await request.get('/r/react-demo', { maxRedirects: 0 })).status()).toBe(302);
+  await page.reload();
+  await page.getByLabel('Short code').fill('react-demo');
+  await page.getByRole('button', { name: 'Refresh', exact: true }).click();
+  await expect(page.getByText('Active', { exact: true })).toBeVisible();
+  await expect(page.getByText('2', { exact: true })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   expect(errors).toEqual([]);
 });

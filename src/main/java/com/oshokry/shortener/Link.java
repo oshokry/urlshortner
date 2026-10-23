@@ -11,6 +11,9 @@ public record Link(String code, String url, Instant createdAt, Instant expiresAt
     public Link disable() {
         return new Link(code, url, createdAt, expiresAt, clicks, lastClickedAt, true);
     }
+    public Link enable() {
+        return new Link(code, url, createdAt, expiresAt, clicks, lastClickedAt, false);
+    }
     public Link extendTo(Instant expiry) {
         return new Link(code, url, createdAt, expiry, clicks, lastClickedAt, disabled);
     }

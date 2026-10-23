@@ -21,13 +21,17 @@ export default function LinkAnalytics({ initialLink }) {
     finally { setPending(false); }
   }
   async function mutate(action) {
-    if (!actionable) return;
-    if (action === 'disable' && !window.confirm(`Permanently disable ${link.code}?`)) return;
+    if (!link || pending || uncertain || (action !== 'enable' && !actionable)) return;
+    if (action === 'disable' && !window.confirm(`Disable ${link.code}?`)) return;
     setPending(true); setError(false);
     try {
       if (action === 'extend') {
         setLink(await api.extend(link.code, duration));
         setMessage('Expiry extended. Your short link is unchanged.');
+      } else if (action === 'enable') {
+        const updated = await api.enable(link.code);
+        setLink(updated);
+        setMessage(updated.expired ? 'Enabled. Extend expiry to restore redirects.' : 'Enabled. Redirects are available again.');
       } else {
         await api.disable(link.code);
         setLink({ ...link, disabled: true });
@@ -65,7 +69,8 @@ export default function LinkAnalytics({ initialLink }) {
     </form>
     <p id="expiry-help">{link?.disabled ? 'Disabled links cannot be extended.' : link && !link.expiresAt ? 'This link never expires.' : 'Adds time to the current expiry, or from now if expired.'}</p>
     <p id="stats-message" role="status" className={error ? 'error' : ''}>{message}</p>
-    <p id="disable-help">Disabling permanently stops redirects. Your click history is kept.</p>
+    <p id="disable-help">Disabling stops redirects until you enable the link again. Your click history is kept.</p>
+    {link?.disabled && <button disabled={pending || uncertain} onClick={() => mutate('enable')}>Enable {link.code}</button>}
     <button className="danger" aria-describedby="disable-help" disabled={!actionable} onClick={() => mutate('disable')}>
       {!link ? 'Look up a link to disable it' : link.disabled ? 'Link disabled' : `Disable ${link.code}`}
     </button>
